@@ -1,21 +1,34 @@
-// swift-tools-version: 6.0
-// The swift-tools-version declares the minimum version of Swift required to build this package.
-
+// swift-tools-version:5.9
 import PackageDescription
 
 let package = Package(
     name: "otpless-ios-intelligence-sdk",
+    platforms: [
+        // IdentityFraud APIs are available from iOS 15,
+        // but you can keep the minimum lower if you want to compile on older,
+        // as long as you gate calls with @available checks.
+        .iOS(.v12)
+    ],
     products: [
-        // Products define the executables and libraries a package produces, making them visible to other packages.
+        // This is what apps / other SDKs will import:
+        // import OTPlessIntelligence
         .library(
-            name: "otpless-ios-intelligence-sdk",
-            targets: ["otpless-ios-intelligence-sdk"]),
+            name: "OTPlessIntelligence",
+            targets: ["OTPlessIntelligence"]
+        )
     ],
     targets: [
-        // Targets are the basic building blocks of a package, defining a module or a test suite.
-        // Targets can depend on other targets in this package and products from dependencies.
-        .target(
-            name: "otpless-ios-intelligence-sdk"),
+        // 1) Binary xcframework from IdentityFraud
+        .binaryTarget(
+            name: "IdentityFraud",
+            path: "Frameworks/IdentityFraud.xcframework"
+        ),
 
+        // 2) Your Swift wrapper target that depends on IdentityFraud
+        .target(
+            name: "OTPlessIntelligence",
+            dependencies: ["IdentityFraud"],
+            path: "Sources/otpless-ios-intelligence-sdk"
+        )
     ]
 )

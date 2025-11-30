@@ -1,0 +1,13 @@
+framework module IdentityFraud {
+    umbrella header "IdentityFraud.h"
+    export *
+    module * { export * }
+    
+    private header "IdentityPrivateHeader.h"
+    
+}
+
+module IdentityFraud.Swift {
+  header "IdentityFraud-Swift.h"
+  requires objc
+}

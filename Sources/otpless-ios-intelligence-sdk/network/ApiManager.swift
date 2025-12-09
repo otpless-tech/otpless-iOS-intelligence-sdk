@@ -41,15 +41,6 @@ final class ApiManager: Sendable {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
 
-//            if enableLogging {
-//                var sentBodyDict: [String: Any]? = nil
-//                if let hb = request.httpBody,
-//                   let obj = try? JSONSerialization.jsonObject(with: hb) as? [String: Any] {
-//                    sentBodyDict = obj
-//                }
-//                logRequestAndResponse(request, body: sentBodyDict, response, data: data)
-//            }
-
             guard let http = response as? HTTPURLResponse else {
                 throw URLError(.badServerResponse)
             }
@@ -65,12 +56,6 @@ final class ApiManager: Sendable {
                 )
             }
 
-//            // success tracking (if you still want it)
-//             if shouldTrackSuccess(path: newPath, method: method, statusCode: http.statusCode, data: data) {
-//                 sendApiEvent(event: .SUCCESS_API_RESPONSE, path: newPath, method: method, statusCode: http.statusCode,
-//                              startedAt: startedAt, xRequestId: xRequestId, data: nil)
-//             }
-
             return data
         } catch {
             // normalize
@@ -84,19 +69,6 @@ final class ApiManager: Sendable {
                     "errorCode": "500", "errorMessage": "Something Went Wrong!"
                 ])
             }
-
-//            // single, centralized emit (uses stashed HTTP data/status if available)
-//            sendApiEvent(
-//                event: .ERROR_API_RESPONSE,
-//                path: newPath,
-//                method: method,
-//                statusCode: pendingStatusCode ?? apiError.statusCode,
-//                startedAt: startedAt,
-//                xRequestId: xRequestId,
-//                data: pendingErrorData,           // includes api_response when we had one
-//                apiError: apiError
-//            )
-
             throw apiError
         }
     }
@@ -137,21 +109,6 @@ final class ApiManager: Sendable {
         
         return urlComponents.url!
     }
-    
-//    private func logRequestAndResponse(_ request: URLRequest, body: [String: Any]?, _ response: URLResponse?, data: Data) {
-//        let urlStr = request.url?.absoluteString
-//        let method = request.httpMethod
-//        var logBody: [String: Any] = [:]
-//        if let body = body {
-//            logBody = body
-//        }
-//        
-//        var statusCode = -1
-//        
-//        if let httpResponse = response as? HTTPURLResponse {
-//            statusCode = httpResponse.statusCode
-//        }
-//    }
     
     private func handleURLError(_ urlError: URLError) -> ApiError {
         let code = urlError.errorCode

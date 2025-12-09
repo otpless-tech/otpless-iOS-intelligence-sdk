@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'OTPlessIntelligence'
-  s.version          = '1.0.2'
+  s.version          = '1.0.3'
   s.summary          = 'OTPless device intelligence SDK for risk & fraud detection.'
   s.description      = <<-DESC
     OTPlessIntelligence is a device intelligence SDK used for risk scoring,
@@ -17,7 +17,7 @@ Pod::Spec.new do |s|
     :tag => s.version.to_s
   }
 
-  s.ios.deployment_target = '15.0'gi
+  s.ios.deployment_target = '15.0'
   s.swift_version         = '5.9'
   s.requires_arc          = true
 

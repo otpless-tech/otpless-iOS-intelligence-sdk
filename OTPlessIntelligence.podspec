@@ -1,19 +1,19 @@
 Pod::Spec.new do |s|
   s.name             = 'OTPlessIntelligence'
-  s.version          = '1.0.3'
+  s.version          = '1.0.4'
   s.summary          = 'OTPless device intelligence SDK for risk & fraud detection.'
   s.description      = <<-DESC
     OTPlessIntelligence is a device intelligence SDK used for risk scoring,
     fraud detection and identity signals, built on top of the IdentityFraud framework.
   DESC
 
-  s.homepage         = 'https://github.com/your-org/otpless-ios-intelligence-sdk'
+  s.homepage         = 'https://github.com/otpless-tech/otpless-ios-intelligence-sdk'
   s.license          = { :type => 'Proprietary', :file => 'LICENSE' }  # or MIT, etc.
   s.author           = { 'OTPless' => 'help@otpless.com' }
-
+  s.social_media_url = 'https://twitter.com/otpless'
   # Where the pod can be fetched from
   s.source           = {
-    :git => 'https://github.com/your-org/otpless-ios-intelligence-sdk.git',
+    :git => 'https://github.com/otpless-tech/otpless-ios-intelligence-sdk',
     :tag => s.version.to_s
   }
 

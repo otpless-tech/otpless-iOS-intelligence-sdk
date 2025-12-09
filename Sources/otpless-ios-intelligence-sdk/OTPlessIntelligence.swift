@@ -14,10 +14,72 @@ public enum OTPlessIntelligenceError: Error {
     case unknown
 }
 
-// MARK: - Public DTO (ObjC-compatible)
+extension GPSLocation {
+    @objc public var logDescription: String {
+        "GPSLocation(lat=\(latitude ?? -1), lon=\(longitude ?? -1), alt=\(altitude ?? -1))"
+    }
+}
 
-/// Structured, OTPless-facing intelligence response.
-/// This is what the OTPless Auth SDK / end app will use.
+// MARK: - IPDetails
+
+extension IPDetails {
+    @objc public var logDescription: String {
+        """
+        IPDetails(
+          ipCity=\(city ?? "nil"),
+          ipRegion=\(region ?? "nil"),
+          ipCountry=\(country ?? "nil"),
+          isp=\(isp ?? "nil"),
+          asn=\(asn ?? "nil"),
+          lat=\(latitude ?? -1),
+          lon=\(longitude ?? -1),
+          fraudScore=\(fraudScore ?? -1)
+        )
+        """
+    }
+}
+
+// MARK: - DeviceMeta
+
+extension DeviceMeta {
+    @objc public var logDescription: String {
+        """
+        DeviceMeta(
+          brand=\(brand ?? "nil"),
+          model=\(model ?? "nil"),
+          product=\(product ?? "nil"),
+          cpuType=\(cpuType ?? "nil"),
+          iOSVersion=\(iOSVersion ?? "nil"),
+          androidVersion=\(androidVersion ?? "nil"),
+          screenResolution=\(screenResolution ?? "nil"),
+          totalRAM=\(totalRAM ?? "nil"),
+          storageAvailable=\(storageAvailable ?? "nil"),
+          storageTotal=\(storageTotal ?? "nil")
+        )
+        """
+    }
+}
+
+// MARK: - AppAnalytics
+
+extension AppAnalytics {
+    @objc public var logDescription: String {
+        let topAffinities: String
+        if let affinity, !affinity.isEmpty {
+            // log only top 5 to keep logs small
+            let sorted = affinity.sorted { $0.value > $1.value }.prefix(5)
+            topAffinities = sorted
+                .map { "\($0.key)=\($0.value)" }
+                .joined(separator: ", ")
+        } else {
+            topAffinities = "none"
+        }
+
+        return "AppAnalytics(affinity=[\(topAffinities)])"
+    }
+}
+
+// MARK: - Public DTO (ObjC-compatible)
 ///
 /// ObjC can see this class and its properties because it is
 /// an @objcMembers NSObject subclass.
@@ -42,7 +104,6 @@ public class OTPlessIntelligenceResponse: NSObject, Codable {
 
     public let factoryResetTime: Int
 
-    // New: OTPless DTOs (no IdentityFraud dependency here)
     public let gpsLocation: GPSLocation?
     public let ipDetails: IPDetails?
     public let deviceMeta: DeviceMeta?
@@ -164,6 +225,32 @@ public class OTPlessIntelligenceResponse: NSObject, Codable {
         case ipDetails
         case deviceMeta
     }
+    public override var description: String {
+           """
+           OTPlessIntelligenceResponse(
+             requestId=\(requestId),
+             deviceId=\(deviceId),
+             ip=\(ip),
+
+             simulator=\(simulator),
+             jailbroken=\(jailbroken),
+             vpn=\(vpn),
+             geoSpoofed=\(geoSpoofed),
+             appTampering=\(appTampering),
+             hooking=\(hooking),
+             proxy=\(proxy),
+             mirroredScreen=\(mirroredScreen),
+             cloned=\(cloned),
+             newDevice=\(newDevice),
+             factoryReset=\(factoryReset),
+             factoryResetTime=\(factoryResetTime),
+
+             gpsLocation=\(gpsLocation?.logDescription ?? "nil"),
+             ipDetails=\(ipDetails?.logDescription ?? "nil"),
+             deviceMeta=\(deviceMeta?.logDescription ?? "nil")
+           )
+           """
+       }
 }
 
 // MARK: - Wrapper for Swift API
@@ -173,28 +260,36 @@ public class OTPlessIntelligenceResponse: NSObject, Codable {
 /// - `rawJson`  → full JSON of  IntelligenceResponse (all fields)
 public struct OTPlessIntelligenceResult {
     public let response: OTPlessIntelligenceResponse
-    public let rawJson: String
 
-    public init(response: OTPlessIntelligenceResponse, rawJson: String) {
+    public init(response: OTPlessIntelligenceResponse) {
         self.response = response
-        self.rawJson = rawJson
     }
 }
 
 // MARK: - Public Facade (Swift API)
 
-public final class OTPlessIntelligence {
+@objc public final class OTPlessIntelligence: NSObject {
 
-    public static let shared = OTPlessIntelligence()
-    private init() {}
+    @objc public static let shared = OTPlessIntelligence()
+    var merchantAppId = ""
+    override init() {}
 
     // MARK: - Configure
     @available(iOS 15.0, *)
     public func configure(
         clientId: String,
         clientSecret: String,
+        appID:String,
         completion: @escaping (Bool) -> Void
     ) {
+        SessionMgr.shared.initialize()
+        if !appID.isEmpty, !clientId.isEmpty, !clientSecret.isEmpty {
+            merchantAppId = appID
+        } else {
+            completion(false)
+            return
+        }
+
         DeviceIntelligenceManager.shared.initialize(
             clientId: clientId,
             clientSecret: clientSecret,
@@ -222,19 +317,21 @@ public final class OTPlessIntelligence {
     /// - `rawJson` → full encoded `IntelligenceResponse` (all fields)
     ///
     @available(iOS 15.0, *)
-    public func getScore(
+    public func fetchIntelligence(
         completion: @escaping (Result<OTPlessIntelligenceResult, OTPlessIntelligenceError>) -> Void
     ) {
         guard DeviceIntelligenceManager.shared.sdkInitialized else {
-            completion(.failure(.notConfigured))
+            completion(.failure(.intelligenceError(
+                requestId: SessionMgr.shared.getTsid(),
+                message: "OTPless Intelligence SDK is not configured"
+            )))
             return
         }
 
         DeviceIntelligenceManager.shared.getScore { response, error in
             if let response {
                 let dto = Self.mapToDTO(response)
-                let rawJson = Self.buildRawJSON(from: response)
-                let result = OTPlessIntelligenceResult(response: dto, rawJson: rawJson)
+                let result = OTPlessIntelligenceResult(response: dto)
                 completion(.success(result))
             } else if let error {
                 completion(.failure(.intelligenceError(
@@ -242,7 +339,10 @@ public final class OTPlessIntelligence {
                     message: error.errorMessage
                 )))
             } else {
-                completion(.failure(.unknown))
+                completion(.failure(.intelligenceError(
+                    requestId: SessionMgr.shared.getTsid(),
+                    message: "Unknown intelligence error"
+                )))
             }
         }
     }
@@ -284,17 +384,14 @@ public final class OTPlessIntelligence {
             deviceMeta: convert(r.deviceMeta)
         )
     }
-
-    /// Full raw JSON from  `IntelligenceResponse` (includes all fields/nested objects).
-    private static func buildRawJSON(from response: IntelligenceResponse) -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted]
-
-        if let data = try? encoder.encode(response),
-           let json = String(data: data, encoding: .utf8) {
-            return json
-        } else {
-            return "{\"message\":\"Failed to encode IntelligenceResponse\"}"
-        }
+    
+    @objc public func gettsID()->String {
+        return SessionMgr.shared.getTsid()
+    }
+    
+    @objc(updateAuthSessionWithIntelligence:)
+    public func updateAuthSessionWithIntelligence(authMap :[String:String]){
+        DeviceIntelligenceManager.shared.updateAuthMap(authMap: authMap)
     }
 }
+

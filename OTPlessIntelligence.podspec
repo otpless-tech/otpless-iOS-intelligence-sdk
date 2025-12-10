@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'OTPlessIntelligence'
-  s.version          = '1.0.4'
+  s.version          = '1.0.5'
   s.summary          = 'OTPless device intelligence SDK for risk & fraud detection.'
   s.description      = <<-DESC
     OTPlessIntelligence is a device intelligence SDK used for risk scoring,
@@ -17,8 +17,8 @@ Pod::Spec.new do |s|
     :tag => s.version.to_s
   }
 
-  s.ios.deployment_target = '15.0'
-  s.swift_version         = '5.9'
+  s.ios.deployment_target = '13.0'
+  s.swift_versions = ['5.5', '5.6', '5.7', '5.8', '5.9', '6.0']
   s.requires_arc          = true
 
   # Your Swift sources (SPM target path)

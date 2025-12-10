@@ -1,7 +1,7 @@
 import Foundation
 import IdentityFraud
 
-internal final class DeviceIntelligenceManager {
+internal final class DeviceIntelligenceManager :@unchecked Sendable {
 
     static let shared = DeviceIntelligenceManager()
     private init() {}

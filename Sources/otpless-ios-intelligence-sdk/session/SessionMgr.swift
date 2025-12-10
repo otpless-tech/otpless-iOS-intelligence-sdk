@@ -10,7 +10,7 @@ import Foundation
 import Security
 
 
-internal final class SessionMgr {
+internal final class SessionMgr : @unchecked Sendable {
     static let shared = SessionMgr()
     init() {}
     private var inid: String?

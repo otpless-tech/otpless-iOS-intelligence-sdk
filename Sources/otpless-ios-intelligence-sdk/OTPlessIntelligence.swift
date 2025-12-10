@@ -268,7 +268,7 @@ public struct OTPlessIntelligenceResult {
 
 // MARK: - Public Facade (Swift API)
 
-@objc public final class OTPlessIntelligence: NSObject {
+@objc public final class OTPlessIntelligence: NSObject,@unchecked Sendable {
 
     @objc public static let shared = OTPlessIntelligence()
     var merchantAppId = ""

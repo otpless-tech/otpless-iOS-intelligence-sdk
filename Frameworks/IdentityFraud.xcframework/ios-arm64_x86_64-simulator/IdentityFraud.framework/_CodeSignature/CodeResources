@@ -6,15 +6,15 @@
 	<dict>
 		<key>Headers/IdentityFraud-Swift.h</key>
 		<data>
-		4R4kdGfnMXSmVGmVrbY3pVro6oE=
+		NqfC/QHRRDodKlD56zY5p2Y/Bd4=
 		</data>
 		<key>Headers/IdentityFraud.h</key>
 		<data>
-		iHv0eeFBfwYNwPiY31GK7CoUwVg=
+		FfTjTa1MvAZQFbWkDgbO8MBSHrM=
 		</data>
 		<key>Info.plist</key>
 		<data>
-		RTAih6VjgApNdD1zf2C62o0IdY8=
+		Oyb3eKWHKRcSGXBs3ngpU/PcAm4=
 		</data>
 		<key>LICENSE</key>
 		<data>
@@ -22,63 +22,67 @@
 		</data>
 		<key>Modules/IdentityFraud.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo</key>
 		<data>
-		A0IfdJYM9elWrimiXhjopmnDM9A=
+		XT2IQEfmdRYP2QWnWPWKT655I2s=
 		</data>
 		<key>Modules/IdentityFraud.swiftmodule/Project/x86_64-apple-ios-simulator.swiftsourceinfo</key>
 		<data>
-		BCC/tIOdghmNJMcscN0jTfTwNtg=
+		QJacwl2DzHgZqJRjNaEWh6S53oI=
 		</data>
 		<key>Modules/IdentityFraud.swiftmodule/arm64-apple-ios-simulator.abi.json</key>
 		<data>
-		FP2DytxYOjESfYMzQJ421fYek2Y=
+		JipLdvfNZ3q37SRApKGlHxLvBCg=
 		</data>
 		<key>Modules/IdentityFraud.swiftmodule/arm64-apple-ios-simulator.private.swiftinterface</key>
 		<data>
-		3ryYMQEG0SxpKK96steKsRPGHT4=
+		WvorJoDw5ssSlnaOSWToygrLyTY=
 		</data>
 		<key>Modules/IdentityFraud.swiftmodule/arm64-apple-ios-simulator.swiftdoc</key>
 		<data>
-		jQv8A6x9hsQjkhyMUzSeXnHSTwk=
+		leNkIyp2Z6sfTm/EIYe+a4QTaqk=
 		</data>
 		<key>Modules/IdentityFraud.swiftmodule/arm64-apple-ios-simulator.swiftinterface</key>
 		<data>
-		3ryYMQEG0SxpKK96steKsRPGHT4=
+		WvorJoDw5ssSlnaOSWToygrLyTY=
 		</data>
 		<key>Modules/IdentityFraud.swiftmodule/arm64-apple-ios-simulator.swiftmodule</key>
 		<data>
-		qaT4Jo93JbP7Fy65NCzc8K6kJuU=
+		b4tRzr3IdUPkga6p8dfMOh3OIXc=
 		</data>
 		<key>Modules/IdentityFraud.swiftmodule/x86_64-apple-ios-simulator.abi.json</key>
 		<data>
-		FP2DytxYOjESfYMzQJ421fYek2Y=
+		JipLdvfNZ3q37SRApKGlHxLvBCg=
 		</data>
 		<key>Modules/IdentityFraud.swiftmodule/x86_64-apple-ios-simulator.private.swiftinterface</key>
 		<data>
-		bd7cBzoDqI99Ubl4Dub7TyoeOPQ=
+		TWV/9Em48fLMZ/bXSN/qWFBblV8=
 		</data>
 		<key>Modules/IdentityFraud.swiftmodule/x86_64-apple-ios-simulator.swiftdoc</key>
 		<data>
-		d90MU+VDpyZTo6zEV6wcj8tTJKg=
+		sFcBWh4fo6H/sIqfaqgApDlS5QI=
 		</data>
 		<key>Modules/IdentityFraud.swiftmodule/x86_64-apple-ios-simulator.swiftinterface</key>
 		<data>
-		bd7cBzoDqI99Ubl4Dub7TyoeOPQ=
+		TWV/9Em48fLMZ/bXSN/qWFBblV8=
 		</data>
 		<key>Modules/IdentityFraud.swiftmodule/x86_64-apple-ios-simulator.swiftmodule</key>
 		<data>
-		Wj/BPC7XyMnnO9oEPwMzyLuOtoI=
+		BVWvZOqbZ43KOIqnJWWHVOEi8HQ=
 		</data>
 		<key>Modules/module.modulemap</key>
 		<data>
-		OHV/+iVIBXwCmFNS6Hd1ZGmSgsM=
+		9/etTbhHzuYHZsRljosLWPn7WzY=
 		</data>
 		<key>PrivateHeaders/IdentityPrivateHeader.h</key>
 		<data>
-		ZXZU1GVyVHIlCefS9OthkHFMHGY=
+		9hD1sxUu0c/qOQzOQXHVe0bITx8=
 		</data>
 		<key>README.md</key>
 		<data>
-		H0Gxt9vEKNoYWXZyW7BnSJZGXx8=
+		ndMW5Jiyk8d6BVQVg/vxyXaO7mw=
+		</data>
+		<key>Sign3Intelligence.podspec</key>
+		<data>
+		RejbcuDvOAB240O+Cv7NhHTuYus=
 		</data>
 	</dict>
 	<key>files2</key>
@@ -87,14 +91,14 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			WSIw06mqJWXeGeOMc0bTjvhikBnWgLj1txMEn9/bCok=
+			B9CRA9SPjpZer/aOJOgRHuqzxatnR3GRzSBMmc2JOAQ=
 			</data>
 		</dict>
 		<key>Headers/IdentityFraud.h</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			fNPEhX+Q9JgKFbc0ciMVhenQGEoxf9ZTkgzT6mAWJms=
+			nPZTMEz2bed2ISvVLugPk8UulmurU6QhAwt4eBG4SRg=
 			</data>
 		</dict>
 		<key>LICENSE</key>
@@ -108,105 +112,112 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			SjKHmhlFg7vhlamh0CTgPCft7mtKOitNxXmL6cbWYkk=
+			rUaQ7DOTxexTH7iVzSjfvinDD6yP8eNZTR2X/s4y3UM=
 			</data>
 		</dict>
 		<key>Modules/IdentityFraud.swiftmodule/Project/x86_64-apple-ios-simulator.swiftsourceinfo</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			6fm9K7g6Hj0XdkA+eKB22wQCtXmLwemu/lruRsZabgA=
+			HnTHw2/SMPHD/8jrmLC8RaTxTn8HilG73AFkww1rAYc=
 			</data>
 		</dict>
 		<key>Modules/IdentityFraud.swiftmodule/arm64-apple-ios-simulator.abi.json</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			6nbyLBe2sILPHhVMuV7ATB+SmVa8RY0aW6YUDomTcQg=
+			FvSOaaiQfwDHzMMnt4UJuw1kZnmKblYQV5TmBsSbt68=
 			</data>
 		</dict>
 		<key>Modules/IdentityFraud.swiftmodule/arm64-apple-ios-simulator.private.swiftinterface</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			hHQZdC0AlTByQln/T286U9ec3G61/kQKbY+7BPQQBbQ=
+			22OzUuRnB8GFXt+ji0egj0Tu76Qs7UvtQ58V1XwKLio=
 			</data>
 		</dict>
 		<key>Modules/IdentityFraud.swiftmodule/arm64-apple-ios-simulator.swiftdoc</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			CCunUMa6m37iOHbIp1qdXFC8TEzYQDYSgCusZNs7waw=
+			NuYtIli4Njm1bP6QOcQh9NdmlFNnwPqb6S87XsRUE7E=
 			</data>
 		</dict>
 		<key>Modules/IdentityFraud.swiftmodule/arm64-apple-ios-simulator.swiftinterface</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			hHQZdC0AlTByQln/T286U9ec3G61/kQKbY+7BPQQBbQ=
+			22OzUuRnB8GFXt+ji0egj0Tu76Qs7UvtQ58V1XwKLio=
 			</data>
 		</dict>
 		<key>Modules/IdentityFraud.swiftmodule/arm64-apple-ios-simulator.swiftmodule</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			9ZslLNjMGsWBrHIg6ivpfzlta2vjgY8lz2KoRNWvS3U=
+			sAeEH+xiaT5SP9lyjfVzsCmD4KlWy+jicD3a4xSB/R0=
 			</data>
 		</dict>
 		<key>Modules/IdentityFraud.swiftmodule/x86_64-apple-ios-simulator.abi.json</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			6nbyLBe2sILPHhVMuV7ATB+SmVa8RY0aW6YUDomTcQg=
+			FvSOaaiQfwDHzMMnt4UJuw1kZnmKblYQV5TmBsSbt68=
 			</data>
 		</dict>
 		<key>Modules/IdentityFraud.swiftmodule/x86_64-apple-ios-simulator.private.swiftinterface</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			XIRDym5vSkBYZO5DK8j3XsAnbFGfVwsxDYv3m2JxAtw=
+			f1lgUPqgDD68Y7QTOWdizsOATJ3ATBiQHNAqmT3gInE=
 			</data>
 		</dict>
 		<key>Modules/IdentityFraud.swiftmodule/x86_64-apple-ios-simulator.swiftdoc</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			bwEd7suotS805Ka//bZaZ3zvDhVIN8GjRAdAGrCaVZU=
+			IXD/qzis/iWVaV6WR/SaBJyj4TFyOc2YpWv6tbQBb+c=
 			</data>
 		</dict>
 		<key>Modules/IdentityFraud.swiftmodule/x86_64-apple-ios-simulator.swiftinterface</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			XIRDym5vSkBYZO5DK8j3XsAnbFGfVwsxDYv3m2JxAtw=
+			f1lgUPqgDD68Y7QTOWdizsOATJ3ATBiQHNAqmT3gInE=
 			</data>
 		</dict>
 		<key>Modules/IdentityFraud.swiftmodule/x86_64-apple-ios-simulator.swiftmodule</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			xX9SCI/uIEvsM9MT5YbyuQF/5yPL4+vR34uIW7IyCG4=
+			+rFL1Z4737NtCl5flIMH56asEvApx2GRLs1dG84+03Y=
 			</data>
 		</dict>
 		<key>Modules/module.modulemap</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			xLpFKr7djXFXFAY1P+kGZCBzqm4P8g3GtXqs39sC8hY=
+			FJOt7cmeQ18wALd7+vf6ljdOAdCiXUN+tMLimtEPWtE=
 			</data>
 		</dict>
 		<key>PrivateHeaders/IdentityPrivateHeader.h</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			YxultO/OfkcS3KjavtrfRaIBExOBeQglRpw4zB/QAJ4=
+			aThOlGK/4xKrS5HDbFV5YxbCx7/tCim2cgTJuDD5ypU=
 			</data>
 		</dict>
 		<key>README.md</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			oXo59cIjq81XrISxtISYeezlna+uYUiFxqju7M1lXrU=
+			y9fTn41TWpqFIzL1yntoXQaxgG9cM1SVer7cI+Sl1/Y=
+			</data>
+		</dict>
+		<key>Sign3Intelligence.podspec</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			mbXeGfJa6poPLyaD8m1i305HmAUHbT83d03LuUYV0jw=
 			</data>
 		</dict>
 	</dict>

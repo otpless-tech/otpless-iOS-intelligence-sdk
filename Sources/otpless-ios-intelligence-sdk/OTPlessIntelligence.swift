@@ -1,18 +1,20 @@
 import Foundation
 import IdentityFraud
 
-// MARK: - Public Error Type (Swift only)
+// MARK: - Public Error Type
 
 public enum OTPlessIntelligenceError: Error {
-    /// `configure(clientId:clientSecret:)` was never successfully called
+    /// `configure(appID:)` was never successfully called
     case notConfigured
 
-    ///  SDK returned an error
+    /// SDK returned an error
     case intelligenceError(requestId: String, message: String)
 
     /// Unexpected nil / inconsistent state
     case unknown
 }
+
+// MARK: - GPSLocation log helper
 
 extension GPSLocation {
     @objc public var logDescription: String {
@@ -20,7 +22,7 @@ extension GPSLocation {
     }
 }
 
-// MARK: - IPDetails
+// MARK: - IPDetails log helper
 
 extension IPDetails {
     @objc public var logDescription: String {
@@ -39,7 +41,7 @@ extension IPDetails {
     }
 }
 
-// MARK: - DeviceMeta
+// MARK: - DeviceMeta log helper
 
 extension DeviceMeta {
     @objc public var logDescription: String {
@@ -50,7 +52,6 @@ extension DeviceMeta {
           product=\(product ?? "nil"),
           cpuType=\(cpuType ?? "nil"),
           iOSVersion=\(iOSVersion ?? "nil"),
-          androidVersion=\(androidVersion ?? "nil"),
           screenResolution=\(screenResolution ?? "nil"),
           totalRAM=\(totalRAM ?? "nil"),
           storageAvailable=\(storageAvailable ?? "nil"),
@@ -60,13 +61,12 @@ extension DeviceMeta {
     }
 }
 
-// MARK: - AppAnalytics
+// MARK: - AppAnalytics log helper
 
 extension AppAnalytics {
     @objc public var logDescription: String {
         let topAffinities: String
         if let affinity, !affinity.isEmpty {
-            // log only top 5 to keep logs small
             let sorted = affinity.sorted { $0.value > $1.value }.prefix(5)
             topAffinities = sorted
                 .map { "\($0.key)=\($0.value)" }
@@ -74,15 +74,62 @@ extension AppAnalytics {
         } else {
             topAffinities = "none"
         }
-
         return "AppAnalytics(affinity=[\(topAffinities)])"
     }
 }
 
-// MARK: - Public DTO (ObjC-compatible)
-///
-/// ObjC can see this class and its properties because it is
-/// an @objcMembers NSObject subclass.
+// MARK: - OTPlessRuleAction
+
+/// Server-side rule decision returned alongside the intelligence response.
+/// Tells the app what action to take (e.g. block, challenge) and why.
+@objcMembers
+public class OTPlessRuleAction: NSObject, Codable {
+    public let action: String?
+    public let name: String?
+    public let ruleDescription: String?
+    public let message: String?
+
+    public init(
+        action: String?,
+        name: String?,
+        ruleDescription: String?,
+        message: String?
+    ) {
+        self.action = action
+        self.name = name
+        self.ruleDescription = ruleDescription
+        self.message = message
+        super.init()
+    }
+
+    public required init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.action = try c.decodeIfPresent(String.self, forKey: .action)
+        self.name = try c.decodeIfPresent(String.self, forKey: .name)
+        self.ruleDescription = try c.decodeIfPresent(String.self, forKey: .ruleDescription)
+        self.message = try c.decodeIfPresent(String.self, forKey: .message)
+        super.init()
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(action, forKey: .action)
+        try c.encodeIfPresent(name, forKey: .name)
+        try c.encodeIfPresent(ruleDescription, forKey: .ruleDescription)
+        try c.encodeIfPresent(message, forKey: .message)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case action, name, ruleDescription, message
+    }
+
+    public override var description: String {
+        "OTPlessRuleAction(action=\(action ?? "nil"), name=\(name ?? "nil"), message=\(message ?? "nil"))"
+    }
+}
+
+// MARK: - OTPlessIntelligenceResponse
+
 @objcMembers
 public class OTPlessIntelligenceResponse: NSObject, Codable {
 
@@ -108,6 +155,9 @@ public class OTPlessIntelligenceResponse: NSObject, Codable {
     public let ipDetails: IPDetails?
     public let deviceMeta: DeviceMeta?
 
+    /// Server-side rule decision. Present only when the backend has rules configured.
+    public let ruleAction: OTPlessRuleAction?
+
     public init(
         requestId: String,
         deviceId: String,
@@ -126,7 +176,8 @@ public class OTPlessIntelligenceResponse: NSObject, Codable {
         factoryResetTime: Int,
         gpsLocation: GPSLocation?,
         ipDetails: IPDetails?,
-        deviceMeta: DeviceMeta?
+        deviceMeta: DeviceMeta?,
+        ruleAction: OTPlessRuleAction?
     ) {
         self.requestId = requestId
         self.deviceId = deviceId
@@ -146,118 +197,94 @@ public class OTPlessIntelligenceResponse: NSObject, Codable {
         self.gpsLocation = gpsLocation
         self.ipDetails = ipDetails
         self.deviceMeta = deviceMeta
+        self.ruleAction = ruleAction
         super.init()
     }
 
-    // Required for Codable on NSObject subclasses
     public required init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-
-        self.requestId = try container.decode(String.self, forKey: .requestId)
-        self.deviceId = try container.decode(String.self, forKey: .deviceId)
-        self.ip = try container.decode(String.self, forKey: .ip)
-
-        self.simulator = try container.decode(Bool.self, forKey: .simulator)
-        self.jailbroken = try container.decode(Bool.self, forKey: .jailbroken)
-        self.vpn = try container.decode(Bool.self, forKey: .vpn)
-        self.geoSpoofed = try container.decode(Bool.self, forKey: .geoSpoofed)
-        self.appTampering = try container.decode(Bool.self, forKey: .appTampering)
-        self.hooking = try container.decode(Bool.self, forKey: .hooking)
-        self.proxy = try container.decode(Bool.self, forKey: .proxy)
-        self.mirroredScreen = try container.decode(Bool.self, forKey: .mirroredScreen)
-        self.cloned = try container.decode(Bool.self, forKey: .cloned)
-        self.newDevice = try container.decode(Bool.self, forKey: .newDevice)
-        self.factoryReset = try container.decode(Bool.self, forKey: .factoryReset)
-
-        self.factoryResetTime = try container.decode(Int.self, forKey: .factoryResetTime)
-
-        self.gpsLocation = try container.decodeIfPresent(GPSLocation.self, forKey: .gpsLocation)
-        self.ipDetails = try container.decodeIfPresent(IPDetails.self, forKey: .ipDetails)
-        self.deviceMeta = try container.decodeIfPresent(DeviceMeta.self, forKey: .deviceMeta)
-
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.requestId = try c.decode(String.self, forKey: .requestId)
+        self.deviceId = try c.decode(String.self, forKey: .deviceId)
+        self.ip = try c.decode(String.self, forKey: .ip)
+        self.simulator = try c.decode(Bool.self, forKey: .simulator)
+        self.jailbroken = try c.decode(Bool.self, forKey: .jailbroken)
+        self.vpn = try c.decode(Bool.self, forKey: .vpn)
+        self.geoSpoofed = try c.decode(Bool.self, forKey: .geoSpoofed)
+        self.appTampering = try c.decode(Bool.self, forKey: .appTampering)
+        self.hooking = try c.decode(Bool.self, forKey: .hooking)
+        self.proxy = try c.decode(Bool.self, forKey: .proxy)
+        self.mirroredScreen = try c.decode(Bool.self, forKey: .mirroredScreen)
+        self.cloned = try c.decode(Bool.self, forKey: .cloned)
+        self.newDevice = try c.decode(Bool.self, forKey: .newDevice)
+        self.factoryReset = try c.decode(Bool.self, forKey: .factoryReset)
+        self.factoryResetTime = try c.decode(Int.self, forKey: .factoryResetTime)
+        self.gpsLocation = try c.decodeIfPresent(GPSLocation.self, forKey: .gpsLocation)
+        self.ipDetails = try c.decodeIfPresent(IPDetails.self, forKey: .ipDetails)
+        self.deviceMeta = try c.decodeIfPresent(DeviceMeta.self, forKey: .deviceMeta)
+        self.ruleAction = try c.decodeIfPresent(OTPlessRuleAction.self, forKey: .ruleAction)
         super.init()
     }
 
     public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-
-        try container.encode(requestId, forKey: .requestId)
-        try container.encode(deviceId, forKey: .deviceId)
-        try container.encode(ip, forKey: .ip)
-
-        try container.encode(simulator, forKey: .simulator)
-        try container.encode(jailbroken, forKey: .jailbroken)
-        try container.encode(vpn, forKey: .vpn)
-        try container.encode(geoSpoofed, forKey: .geoSpoofed)
-        try container.encode(appTampering, forKey: .appTampering)
-        try container.encode(hooking, forKey: .hooking)
-        try container.encode(proxy, forKey: .proxy)
-        try container.encode(mirroredScreen, forKey: .mirroredScreen)
-        try container.encode(cloned, forKey: .cloned)
-        try container.encode(newDevice, forKey: .newDevice)
-        try container.encode(factoryReset, forKey: .factoryReset)
-
-        try container.encode(factoryResetTime, forKey: .factoryResetTime)
-
-        try container.encodeIfPresent(gpsLocation, forKey: .gpsLocation)
-        try container.encodeIfPresent(ipDetails, forKey: .ipDetails)
-        try container.encodeIfPresent(deviceMeta, forKey: .deviceMeta)
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(requestId, forKey: .requestId)
+        try c.encode(deviceId, forKey: .deviceId)
+        try c.encode(ip, forKey: .ip)
+        try c.encode(simulator, forKey: .simulator)
+        try c.encode(jailbroken, forKey: .jailbroken)
+        try c.encode(vpn, forKey: .vpn)
+        try c.encode(geoSpoofed, forKey: .geoSpoofed)
+        try c.encode(appTampering, forKey: .appTampering)
+        try c.encode(hooking, forKey: .hooking)
+        try c.encode(proxy, forKey: .proxy)
+        try c.encode(mirroredScreen, forKey: .mirroredScreen)
+        try c.encode(cloned, forKey: .cloned)
+        try c.encode(newDevice, forKey: .newDevice)
+        try c.encode(factoryReset, forKey: .factoryReset)
+        try c.encode(factoryResetTime, forKey: .factoryResetTime)
+        try c.encodeIfPresent(gpsLocation, forKey: .gpsLocation)
+        try c.encodeIfPresent(ipDetails, forKey: .ipDetails)
+        try c.encodeIfPresent(deviceMeta, forKey: .deviceMeta)
+        try c.encodeIfPresent(ruleAction, forKey: .ruleAction)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case requestId
-        case deviceId
-        case ip
-        case simulator
-        case jailbroken
-        case vpn
-        case geoSpoofed
-        case appTampering
-        case hooking
-        case proxy
-        case mirroredScreen
-        case cloned
-        case newDevice
-        case factoryReset
-        case factoryResetTime
-
-        case gpsLocation
-        case ipDetails
-        case deviceMeta
+        case requestId, deviceId, ip
+        case simulator, jailbroken, vpn, geoSpoofed, appTampering
+        case hooking, proxy, mirroredScreen, cloned, newDevice
+        case factoryReset, factoryResetTime
+        case gpsLocation, ipDetails, deviceMeta, ruleAction
     }
+
     public override var description: String {
-           """
-           OTPlessIntelligenceResponse(
-             requestId=\(requestId),
-             deviceId=\(deviceId),
-             ip=\(ip),
-
-             simulator=\(simulator),
-             jailbroken=\(jailbroken),
-             vpn=\(vpn),
-             geoSpoofed=\(geoSpoofed),
-             appTampering=\(appTampering),
-             hooking=\(hooking),
-             proxy=\(proxy),
-             mirroredScreen=\(mirroredScreen),
-             cloned=\(cloned),
-             newDevice=\(newDevice),
-             factoryReset=\(factoryReset),
-             factoryResetTime=\(factoryResetTime),
-
-             gpsLocation=\(gpsLocation?.logDescription ?? "nil"),
-             ipDetails=\(ipDetails?.logDescription ?? "nil"),
-             deviceMeta=\(deviceMeta?.logDescription ?? "nil")
-           )
-           """
-       }
+        """
+        OTPlessIntelligenceResponse(
+          requestId=\(requestId),
+          deviceId=\(deviceId),
+          ip=\(ip),
+          simulator=\(simulator),
+          jailbroken=\(jailbroken),
+          vpn=\(vpn),
+          geoSpoofed=\(geoSpoofed),
+          appTampering=\(appTampering),
+          hooking=\(hooking),
+          proxy=\(proxy),
+          mirroredScreen=\(mirroredScreen),
+          cloned=\(cloned),
+          newDevice=\(newDevice),
+          factoryReset=\(factoryReset),
+          factoryResetTime=\(factoryResetTime),
+          gpsLocation=\(gpsLocation?.logDescription ?? "nil"),
+          ipDetails=\(ipDetails?.logDescription ?? "nil"),
+          deviceMeta=\(deviceMeta?.logDescription ?? "nil"),
+          ruleAction=\(ruleAction?.description ?? "nil")
+        )
+        """
+    }
 }
 
-// MARK: - Wrapper for Swift API
+// MARK: - OTPlessIntelligenceResult
 
-/// Wrapper returned from Swift `getScore`:
-/// - `response`  → structured DTO for app / SDK (ObjC compatible)
-/// - `rawJson`  → full JSON of  IntelligenceResponse (all fields)
 public struct OTPlessIntelligenceResult {
     public let response: OTPlessIntelligenceResponse
 
@@ -266,36 +293,32 @@ public struct OTPlessIntelligenceResult {
     }
 }
 
-// MARK: - Public Facade (Swift API)
+// MARK: - OTPlessIntelligence (Public Facade)
 
-@objc public final class OTPlessIntelligence: NSObject,@unchecked Sendable {
+@objc public final class OTPlessIntelligence: NSObject, @unchecked Sendable {
 
     @objc public static let shared = OTPlessIntelligence()
     var merchantAppId = ""
     override init() {}
 
     // MARK: - Configure
+
+    /// Initialises the SDK. Only `appID` is required — credentials are fetched internally.
     @available(iOS 15.0, *)
     public func configure(
-        clientId: String,
-        clientSecret: String,
-        appID:String,
+        appID: String,
         completion: @escaping (Bool) -> Void
     ) {
-        SessionMgr.shared.initialize()
-        if !appID.isEmpty, !clientId.isEmpty, !clientSecret.isEmpty {
-            merchantAppId = appID
-        } else {
+        guard !appID.isEmpty else {
             completion(false)
             return
         }
-
-        DeviceIntelligenceManager.shared.initialize(
-            clientId: clientId,
-            clientSecret: clientSecret,
-            completion: completion
-        )
+        merchantAppId = appID
+        SessionMgr.shared.initialize()
+        DeviceIntelligenceManager.shared.initialize(completion: completion)
     }
+
+    // MARK: - Update Options
 
     @available(iOS 15.0, *)
     public func updateOptions(
@@ -310,12 +333,8 @@ public struct OTPlessIntelligenceResult {
         )
     }
 
-    // MARK: - Get Score (DTO + raw JSON)
+    // MARK: - Fetch Intelligence
 
-    /// Returns:
-    /// - `OTPlessIntelligenceResponse` → structured view for OTPless Auth / app
-    /// - `rawJson` → full encoded `IntelligenceResponse` (all fields)
-    ///
     @available(iOS 15.0, *)
     public func fetchIntelligence(
         completion: @escaping (Result<OTPlessIntelligenceResult, OTPlessIntelligenceError>) -> Void
@@ -331,8 +350,7 @@ public struct OTPlessIntelligenceResult {
         DeviceIntelligenceManager.shared.getScore { response, error in
             if let response {
                 let dto = Self.mapToDTO(response)
-                let result = OTPlessIntelligenceResult(response: dto)
-                completion(.success(result))
+                completion(.success(OTPlessIntelligenceResult(response: dto)))
             } else if let error {
                 completion(.failure(.intelligenceError(
                     requestId: error.requestId,
@@ -347,20 +365,18 @@ public struct OTPlessIntelligenceResult {
         }
     }
 
-    // MARK: - Internal helpers
+    // MARK: - Auth Session Link
 
-    /// Generic JSON round-trip: IdentityFraud.* -> OTPless DTO
-    private static func convert<Source: Encodable, Target: Decodable>(
-        _ value: Source?
-    ) -> Target? {
-        guard let value else { return nil }
-        let encoder = JSONEncoder()
-        let decoder = JSONDecoder()
-        guard let data = try? encoder.encode(value) else { return nil }
-        return try? decoder.decode(Target.self, from: data)
+    @objc(updateAuthSessionWithIntelligence:)
+    public func updateAuthSessionWithIntelligence(authMap: [String: String]) {
+        DeviceIntelligenceManager.shared.updateAuthMap(authMap: authMap)
     }
 
-    // MARK: - Internal mappers
+    @objc public func gettsID() -> String {
+        return SessionMgr.shared.getTsid()
+    }
+
+    // MARK: - Internal Mappers
 
     private static func mapToDTO(_ r: IntelligenceResponse) -> OTPlessIntelligenceResponse {
         OTPlessIntelligenceResponse(
@@ -381,17 +397,15 @@ public struct OTPlessIntelligenceResult {
             factoryResetTime: r.factoryResetTime?.intValue ?? 0,
             gpsLocation: convert(r.gpsLocation),
             ipDetails: convert(r.ipDetails),
-            deviceMeta: convert(r.deviceMeta)
+            deviceMeta: convert(r.deviceMeta),
+            ruleAction: convert(r.ruleAction)
         )
     }
-    
-    @objc public func gettsID()->String {
-        return SessionMgr.shared.getTsid()
-    }
-    
-    @objc(updateAuthSessionWithIntelligence:)
-    public func updateAuthSessionWithIntelligence(authMap :[String:String]){
-        DeviceIntelligenceManager.shared.updateAuthMap(authMap: authMap)
+
+    /// JSON round-trip converter: IdentityFraud type → OTPless public type
+    private static func convert<Source: Encodable, Target: Decodable>(_ value: Source?) -> Target? {
+        guard let value else { return nil }
+        guard let data = try? JSONEncoder().encode(value) else { return nil }
+        return try? JSONDecoder().decode(Target.self, from: data)
     }
 }
-

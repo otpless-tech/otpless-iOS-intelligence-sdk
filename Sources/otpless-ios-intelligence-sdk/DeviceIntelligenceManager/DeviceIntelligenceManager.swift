@@ -1,7 +1,8 @@
 import Foundation
 import IdentityFraud
+import UIKit
 
-internal final class DeviceIntelligenceManager :@unchecked Sendable {
+internal final class DeviceIntelligenceManager: @unchecked Sendable {
 
     static let shared = DeviceIntelligenceManager()
     private init() {}
@@ -9,42 +10,65 @@ internal final class DeviceIntelligenceManager :@unchecked Sendable {
     internal private(set) var sdkInitialized: Bool = false
     internal let apiRepository = ApiRepository(userAuthApiTimeout: 30.0)
     private var currentIntelligenceTask: Task<Void, Never>?
+
     private lazy var intelligenceDataUseCase: IntelligenceDataUseCase = {
         return IntelligenceDataUseCase()
     }()
+
     private lazy var getStateUseCase: GetState = {
         return GetState()
+    }()
+
+    private lazy var getConfigUseCase: GetConfig = {
+        return GetConfig()
     }()
 
     var dfrID = ""
 
     // MARK: - Initialize
-
-    internal func initialize(
-        clientId: String,
-        clientSecret: String,
-        completion: @escaping (Bool) -> Void
-    ) {
-       
+    // Fetches intelligenceClientId + secret from the platform config API,
+    // then initialises IdentitySDK with those credentials.
+    internal func initialize(completion: @escaping (Bool) -> Void) {
         guard #available(iOS 15.0, *) else {
+            OTPlessLogger.log("configure() requires iOS 15.0 or later", level: .error)
             completion(false)
             return
         }
 
-        let builder = Options.OptionBuilder()
-            .setClientId(clientId)
-            .setClientSecret(clientSecret)
-            .setBaseUrl(ApiManager.INTELLIGENCE_SERVER_PATH)
-            .setEnvironment(.PROD)
+        OTPlessLogger.log("Initialising — appId: \(OTPlessIntelligence.shared.merchantAppId), bundle: \(Bundle.main.bundleIdentifier ?? "unknown")")
 
-        let options = builder.build()
+        Task { [weak self] in
+            // Step 1: fetch credentials from platform API
+            guard let config = await self?.getConfigUseCase.invoke() else {
+                OTPlessLogger.log("Initialisation failed: could not fetch config from platform API", level: .error)
+                OTPlessLogger.log("Check: (1) appId is correct, (2) iOS intelligence is enabled for this app in the OTPless dashboard, (3) network connectivity", level: .error)
+                completion(false)
+                return
+            }
 
-        IdentitySDK.getInstance().initAsync(options: options) { [weak self] initialized in
-            self?.sdkInitialized = initialized
-            completion(initialized)
+            // Step 2: init IdentityFraud SDK with fetched credentials
+            OTPlessLogger.log("Initialising IdentityFraud SDK…")
+            let builder = Options.OptionBuilder()
+                .setClientId(config.intelligenceClientId)
+                .setClientSecret(config.secret)
+                .setBaseUrl(ApiManager.INTELLIGENCE_SERVER_PATH)
+                .setSSLPinning(true)
+                .setEnvironment(.PROD)
+
+            let options = builder.build()
+
+            IdentitySDK.getInstance().initAsync(options: options) { [weak self] initialized in
+                if initialized {
+                    OTPlessLogger.log("IdentityFraud SDK initialised successfully")
+                } else {
+                    OTPlessLogger.log("IdentityFraud SDK initialisation failed — check clientId/secret validity", level: .error)
+                }
+                self?.sdkInitialized = initialized
+                completion(initialized)
+            }
         }
     }
-    
+
     func requestStateForDeviceIfNil(onFetch: @escaping @Sendable (String?) -> Void) {
         if let savedState = SecureStorage.shared.retrieve(key: Constants.STATE_KEY),
            !savedState.isEmpty {
@@ -54,12 +78,11 @@ internal final class DeviceIntelligenceManager :@unchecked Sendable {
                 let stateResponse = await self?.getStateUseCase
                     .invoke(queryParams: [:], isRetry: false)
                 let state = stateResponse?.0?.state
-                await MainActor.run(body: {
+                await MainActor.run {
                     onFetch(state)
-                })
+                }
             }
         }
-        
     }
 
     internal func updateOptions(
@@ -71,21 +94,15 @@ internal final class DeviceIntelligenceManager :@unchecked Sendable {
 
         let builder = UpdateOption.UpdateOptionBuilder()
 
-        if let userId {
-            _ = builder.setUserId(userId)
-        }
-        if let phoneNumber {
-            _ = builder.setPhoneNumber(phoneNumber)
-        }
-        if let attrs = additionalAttributes {
-            _ = builder.setAdditionalAttributes(attrs)
-        }
+        if let userId { _ = builder.setUserId(userId) }
+        if let phoneNumber { _ = builder.setPhoneNumber(phoneNumber) }
+        if let attrs = additionalAttributes { _ = builder.setAdditionalAttributes(attrs) }
 
         let updateOption = builder.build()
         IdentitySDK.getInstance().updateOptions(updateOption: updateOption)
     }
 
-    // MARK: - Get Score (raw types)
+    // MARK: - Get Score
     internal func getScore(
         completion: @escaping (_ response: IntelligenceResponse?, _ error: IntelligenceError?) -> Void
     ) {
@@ -93,15 +110,15 @@ internal final class DeviceIntelligenceManager :@unchecked Sendable {
         let state = SessionMgr.shared.getState() ?? ""
 
         if state.isEmpty {
-            requestStateForDeviceIfNil(onFetch: { newState in
+            requestStateForDeviceIfNil { newState in
                 guard let newState = newState, !newState.isEmpty else { return }
                 SessionMgr.shared.setState(newState)
-            })
+            }
         }
-    
+
         guard #available(iOS 15.0, *) else {
             let error = IntelligenceError(
-                requestId: SessionMgr.shared.getTsid() ?? "NA",
+                requestId: SessionMgr.shared.getTsid(),
                 errorMessage: "Unsupported iOS version"
             )
             completion(nil, error)
@@ -111,75 +128,80 @@ internal final class DeviceIntelligenceManager :@unchecked Sendable {
         let listener = ScoreListener(completion: completion)
         IdentitySDK.getInstance().getIntelligence(listener: listener)
     }
-    
-    /// Full raw JSON from `IntelligenceResponse` as a dictionary (includes all fields/nested objects).
+
+    // MARK: - Request Body Builder
+
+    private func getRequestMap(authMap: [String: String]) -> [String: Any] {
+        var requestData: [String: Any] = [
+            "tsId": SessionMgr.shared.getTsid(),
+            "platform": "IOS"
+        ]
+
+        requestData["inId"] = SessionMgr.shared.getInid()
+        requestData["appId"] = OTPlessIntelligence.shared.merchantAppId
+
+        // Vendor identifier — iOS equivalent of Android gaId
+        if let idfv = UIDevice.current.identifierForVendor?.uuidString {
+            requestData["gaId"] = idfv
+        }
+
+        if let state = SessionMgr.shared.getState(), !state.isEmpty {
+            requestData["state"] = state
+        }
+
+        if let asid = authMap["asId"], !asid.isEmpty {
+            requestData["asId"] = asid
+        }
+
+        if !DeviceIntelligenceManager.shared.dfrID.isEmpty {
+            requestData["dfrId"] = DeviceIntelligenceManager.shared.dfrID
+        }
+
+        if let token = authMap["token"], !token.isEmpty {
+            requestData["token"] = token
+        }
+
+        return requestData
+    }
+
+    // MARK: - Push to Backend
+
+    func pushIntelligenceDataToServerWithIntelligenceError(error: IntelligenceError) {
+        var requestMap = getRequestMap(authMap: [:])
+        requestMap["data"] = ["requestId": error.requestId, "errorMessage": error.errorMessage]
+        postIntelligencData(data: requestMap)
+    }
+
+    func pushIntelligenceDataToServerWithIntelligenceData(response: IntelligenceResponse) {
+        var requestMap = getRequestMap(authMap: [:])
+        requestMap["data"] = buildRawJSON(from: response)
+        postIntelligencData(data: requestMap)
+    }
+
     private func buildRawJSON(from response: IntelligenceResponse) -> [String: Any] {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted]
-
         guard
             let data = try? encoder.encode(response),
             let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else {
             return ["message": "Failed to encode IntelligenceResponse"]
         }
-
         return dict
     }
 
-    
-    private func getRequestMap(authMap: [String:String]) -> [String: Any] {
-        var requestData: [String: Any] = ["tsId": SessionMgr.shared.getTsid()]
-        
-        requestData["inId"] = SessionMgr.shared.getInid()
-        requestData["appId"] = OTPlessIntelligence.shared.merchantAppId
-        
-        if let state = SessionMgr.shared.getState(), !state.isEmpty {
-            requestData["state"] = state
-        }
-        
-        if let asid = authMap["asId"],!asid.isEmpty{
-            requestData["asId"] = asid
-        }
-        
-        if !DeviceIntelligenceManager.shared.dfrID.isEmpty {
-            requestData["dfrId"] = DeviceIntelligenceManager.shared.dfrID
-        }
-        if let token = authMap["token"],!token.isEmpty{
-            requestData["token"] = token
-        }
-        return requestData
-    }
-    
-    func pushIntelligenceDataToServerWithIntelligenceError(error: IntelligenceError) {
-        var requestMap = getRequestMap(authMap:[:])
-        requestMap["data"] = ["requestId":error.requestId,"errorMessage":error.errorMessage]
-        postIntelligencData(data: requestMap)
-    }
-    
-    func pushIntelligenceDataToServerWithIntelligenceData(response: IntelligenceResponse) {
-        var requestMap = getRequestMap(authMap:[:])
-        requestMap["data"] = buildRawJSON(from: response)
-        postIntelligencData(data: requestMap)
-    }
-    
-    // Wrapper type to make the payload Sendable for Task closure capture
     private struct IntelligencePayload: @unchecked Sendable {
         let data: [String: Any]
     }
-    
+
     internal func postIntelligencData(data: [String: Any]) {
-        // Cancel any in-flight request
         currentIntelligenceTask?.cancel()
-        
         let payload = IntelligencePayload(data: data)
-        
-        // Start a new task with Sendable payload + Sendable self
         currentIntelligenceTask = Task { [weak self, payload] in
             await self?.sendIntelligenceDataWithRetry(data: payload.data)
         }
     }
-    
+
     private func sendIntelligenceDataWithRetry(
         data: [String: Any],
         maxAttempts: Int = 5,
@@ -198,33 +220,28 @@ internal final class DeviceIntelligenceManager :@unchecked Sendable {
                 }
                 return
 
-            case .error(_):
-                // If we've exhausted attempts, stop
+            case .error:
                 if attempt == maxAttempts { return }
-
                 do {
-                    let nanos = delayMs * 1_000_000  // ms → ns
-                    try await Task.sleep(nanoseconds: nanos)
+                    try await Task.sleep(nanoseconds: delayMs * 1_000_000)
                 } catch {
-                    // Task was cancelled while sleeping
                     return
                 }
-
-                // Next attempt
                 delayMs *= 2
                 attempt += 1
             }
         }
     }
-    
-    internal func updateAuthMap(authMap : [String:String]) {
+
+    internal func updateAuthMap(authMap: [String: String]) {
         if !dfrID.isEmpty {
-            var requestMap = getRequestMap(authMap: authMap)
+            let requestMap = getRequestMap(authMap: authMap)
             postIntelligencData(data: requestMap)
         }
     }
-
 }
+
+// MARK: - ScoreListener
 
 internal final class ScoreListener: NSObject, IntelligenceResponseListener {
 
@@ -243,7 +260,4 @@ internal final class ScoreListener: NSObject, IntelligenceResponseListener {
         DeviceIntelligenceManager.shared.pushIntelligenceDataToServerWithIntelligenceError(error: error)
         completion(nil, error)
     }
-    
-  
 }
-

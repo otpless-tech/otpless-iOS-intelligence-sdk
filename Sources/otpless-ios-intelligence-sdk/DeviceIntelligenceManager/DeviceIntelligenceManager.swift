@@ -140,6 +140,10 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
         requestData["inId"] = SessionMgr.shared.getInid()
         requestData["appId"] = OTPlessIntelligence.shared.merchantAppId
 
+        if let rsId = SessionMgr.shared.getRsid(), !rsId.isEmpty {
+            requestData["rsId"] = rsId
+        }
+
         // Vendor identifier — iOS equivalent of Android gaId
         if let idfv = UIDevice.current.identifierForVendor?.uuidString {
             requestData["gaId"] = idfv

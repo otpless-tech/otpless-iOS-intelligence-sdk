@@ -1,6 +1,40 @@
 import Foundation
 import IdentityFraud
 
+// MARK: - OTPlessSessionContext
+
+/// Optional session identifiers that the host app or OTPless Auth SDK can supply
+/// at configure time. Any value provided here overrides the SDK's auto-generated
+/// or persisted equivalent. Values not provided are filled in automatically.
+@objcMembers
+public class OTPlessSessionContext: NSObject {
+    /// Request/session identifier from an upstream flow (e.g. OTPless Auth SDK).
+    public let rsId: String?
+    /// Installation identifier. Stable across sessions for a given device install.
+    public let inId: String?
+    /// Tracking session identifier. Ties intelligence events to a single user session.
+    public let tsId: String?
+    /// Server-issued state token for request correlation.
+    public let state: String?
+
+    public init(
+        rsId: String? = nil,
+        inId: String? = nil,
+        tsId: String? = nil,
+        state: String? = nil
+    ) {
+        self.rsId = rsId
+        self.inId = inId
+        self.tsId = tsId
+        self.state = state
+        super.init()
+    }
+
+    public override var description: String {
+        "OTPlessSessionContext(rsId=\(rsId ?? "nil"), inId=\(inId ?? "nil"), tsId=\(tsId ?? "nil"), state=\(state ?? "nil"))"
+    }
+}
+
 // MARK: - Public Error Type
 
 public enum OTPlessIntelligenceError: Error {
@@ -303,10 +337,17 @@ public struct OTPlessIntelligenceResult {
 
     // MARK: - Configure
 
-    /// Initialises the SDK. Only `appID` is required — credentials are fetched internally.
+    /// Initialises the SDK.
+    ///
+    /// - `appID` is the only required parameter.
+    /// - `sessionContext` is optional. Pass an `OTPlessSessionContext` when you already
+    ///   have session identifiers (e.g. from the OTPless Auth SDK). Any ID provided
+    ///   overrides the SDK's auto-generated or persisted value. IDs not provided are
+    ///   filled in automatically.
     @available(iOS 15.0, *)
     public func configure(
         appID: String,
+        sessionContext: OTPlessSessionContext? = nil,
         completion: @escaping (Bool) -> Void
     ) {
         guard !appID.isEmpty else {
@@ -314,7 +355,7 @@ public struct OTPlessIntelligenceResult {
             return
         }
         merchantAppId = appID
-        SessionMgr.shared.initialize()
+        SessionMgr.shared.initialize(from: sessionContext)
         DeviceIntelligenceManager.shared.initialize(completion: completion)
     }
 

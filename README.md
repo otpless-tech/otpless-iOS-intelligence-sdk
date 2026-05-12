@@ -1,156 +1,229 @@
-# OTPless Intelligence SDK — iOS
+# OTPless Intelligence SDK — iOS Integration Guide
 
-Device intelligence and fraud-detection SDK for iOS. Collect real-time risk signals from a device — jailbreak, VPN, app tampering, GPS spoofing, screen mirroring, cloned apps, and more — to secure authentication and transaction flows.
+## Overview
+
+OTPless Intelligence SDK collects real-time device signals to detect fraud and security risks — jailbreak, VPN, app tampering, GPS spoofing, screen mirroring, cloned apps, and more. These signals are used to protect authentication flows and high-value transactions.
+
+**How it works:**
+
+```
+Your App  ──configure(appID)──▶  OTPless Platform  ──credentials──▶  IdentityFraud Engine
+                                                                              │
+Your App  ◀──risk signals──  OTPless Platform  ◀──raw signals──  IdentityFraud Engine
+```
+
+1. Your app calls `configure(appID:)` — the SDK fetches credentials from OTPless
+2. The IdentityFraud engine initialises with those credentials
+3. Your app calls `fetchIntelligence()` — the engine fingerprints the device
+4. Risk signals are returned to your app and also pushed to OTPless backend
 
 ---
 
 ## Table of Contents
 
-1. [Requirements](#requirements)
-2. [Installation](#installation)
-   - [Swift Package Manager](#swift-package-manager)
-   - [CocoaPods](#cocoapods)
-3. [Project Setup](#project-setup)
-   - [Info.plist Permissions](#infoplist-permissions)
-   - [Entitlements](#entitlements)
-4. [Integration Steps](#integration-steps)
-   - [Step 1 — Import the SDK](#step-1--import-the-sdk)
-   - [Step 2 — Configure at App Launch](#step-2--configure-at-app-launch)
-   - [Step 3 — Update User Context (Optional)](#step-3--update-user-context-optional)
-   - [Step 4 — Fetch Intelligence](#step-4--fetch-intelligence)
-   - [Step 5 — Handle the Response](#step-5--handle-the-response)
-   - [Step 6 — Link Auth Session (OTPless Auth users)](#step-6--link-auth-session-otpless-auth-users)
-5. [API Reference](#api-reference)
-6. [Response Reference](#response-reference)
-7. [Error Reference](#error-reference)
-8. [Objective-C Usage](#objective-c-usage)
-9. [Complete Example](#complete-example)
-10. [Troubleshooting](#troubleshooting)
-11. [Changelog](#changelog)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+  - [Swift Package Manager](#option-a--swift-package-manager-recommended)
+  - [CocoaPods](#option-b--cocoapods)
+- [Project Setup](#project-setup)
+  - [Permissions](#1-permissions-infoplist)
+  - [Entitlements](#2-entitlements)
+- [SDK Integration](#sdk-integration)
+  - [Step 1 — Import](#step-1--import)
+  - [Step 2 — Configure](#step-2--configure)
+  - [Step 3 — Update User Context](#step-3--update-user-context-optional)
+  - [Step 4 — Fetch Intelligence](#step-4--fetch-intelligence)
+  - [Step 5 — Handle Response](#step-5--handle-the-response)
+  - [Step 6 — Link Auth Session](#step-6--link-auth-session-otpless-auth-users-only)
+- [API Reference](#api-reference)
+- [Response Reference](#response-reference)
+- [Error Reference](#error-reference)
+- [SwiftUI Integration](#swiftui-integration)
+- [Objective-C Integration](#objective-c-integration)
+- [Sequence Diagrams](#sequence-diagrams)
+- [Troubleshooting](#troubleshooting)
+- [Changelog](#changelog)
 
 ---
 
-## Requirements
+## Prerequisites
 
-| Requirement | Value |
+| Requirement | Details |
 |---|---|
-| iOS deployment target | 13.0+ |
-| Runtime features available from | iOS 15.0+ |
+| Xcode | 14.0 or later |
+| iOS deployment target | 13.0 or later (runtime features require iOS 15.0+) |
 | Swift | 5.5 – 6.0 |
-| Xcode | 14+ |
+| OTPless account | Sign up at [otpless.com](https://otpless.com) |
+| App ID | Found in the OTPless dashboard under your app's settings |
 
-> The SDK compiles on iOS 13+. The `configure()` and `fetchIntelligence()` calls are annotated `@available(iOS 15.0, *)` — wrap them in an availability check or ensure your minimum deployment target is iOS 15.
+> **iOS 13 vs iOS 15:** The SDK _compiles_ on iOS 13+. The `configure()` and `fetchIntelligence()` methods are `@available(iOS 15.0, *)`. If your deployment target is below iOS 15, wrap these calls in `if #available(iOS 15.0, *) { }`.
 
 ---
 
 ## Installation
 
-### Swift Package Manager
+### Option A — Swift Package Manager (Recommended)
 
-**Option A — Xcode UI**
+**Using Xcode:**
 
 1. Open your project in Xcode
 2. Go to **File → Add Package Dependencies…**
-3. Enter the repository URL:
+3. In the search bar paste:
    ```
    https://github.com/otpless-tech/otpless-ios-intelligence-sdk
    ```
-4. Select version **1.1.0** (Up to Next Major)
-5. Add **OTPlessIntelligence** to your app target
+4. Set the version rule to **Up to Next Major Version** from `1.1.0`
+5. Click **Add Package**
+6. In the **Choose Package Products** sheet, tick **OTPlessIntelligence** and select your app target
+7. Click **Add Package**
 
-**Option B — Package.swift**
+**Using Package.swift (for library/framework targets):**
 
 ```swift
 // Package.swift
-dependencies: [
-    .package(
-        url: "https://github.com/otpless-tech/otpless-ios-intelligence-sdk",
-        from: "1.1.0"
-    )
-],
-targets: [
-    .target(
-        name: "YourApp",
-        dependencies: [
-            .product(name: "OTPlessIntelligence", package: "otpless-ios-intelligence-sdk")
-        ]
-    )
-]
+let package = Package(
+    ...
+    dependencies: [
+        .package(
+            url: "https://github.com/otpless-tech/otpless-ios-intelligence-sdk",
+            from: "1.1.0"
+        )
+    ],
+    targets: [
+        .target(
+            name: "YourTarget",
+            dependencies: [
+                .product(name: "OTPlessIntelligence", package: "otpless-ios-intelligence-sdk")
+            ]
+        )
+    ]
+)
 ```
 
 ---
 
-### CocoaPods
+### Option B — CocoaPods
 
-1. Add the pod to your `Podfile`:
+1. If you don't have a `Podfile` yet, run `pod init` in your project directory.
+
+2. Add the pod to your `Podfile`:
 
 ```ruby
 platform :ios, '13.0'
 
 target 'YourApp' do
   use_frameworks!
+
   pod 'OTPlessIntelligence', '~> 1.1.0'
 end
 ```
 
-2. Run:
+3. Install:
 
 ```bash
 pod install
 ```
 
-3. Open the `.xcworkspace` file (not `.xcodeproj`) from now on.
+4. **Important:** From now on always open `YourApp.xcworkspace`, not `YourApp.xcodeproj`.
 
 ---
 
 ## Project Setup
 
-### Info.plist Permissions
+### 1. Permissions (Info.plist)
 
-Signals are collected on a best-effort basis. Permissions that are not granted are silently skipped — the SDK will not crash. The more permissions are available, the higher the signal accuracy.
+Signals are collected on a best-effort basis. Any permission that is not granted is silently skipped — the SDK will not crash or ask for permissions itself. The more permissions are available, the higher the signal accuracy.
 
-Add the following keys to your `Info.plist`:
+Open your `Info.plist` and add:
 
 ```xml
-<!-- Required for GPS location and geo-spoofing detection -->
+<!-- GPS location — enables gpsLocation and geoSpoofed signals -->
 <key>NSLocationWhenInUseUsageDescription</key>
-<string>Your location is used to detect suspicious activity and protect your account.</string>
-
-<!-- Recommended — improves location accuracy -->
-<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-<string>Your location is used to detect suspicious activity and protect your account.</string>
+<string>Used to detect location spoofing and protect your account security.</string>
 ```
 
-**In Xcode:**
-- Select your project → target → **Info** tab
-- Click **+** on any row
-- Add `Privacy - Location When In Use Usage Description` with a description string
+**In Xcode UI:**
+- Select your target → **Info** tab → hover over any row → click **+**
+- Add key: `Privacy - Location When In Use Usage Description`
+- Value: Your description string
+
+> You must request location permission from the user in code before calling `fetchIntelligence()` for the GPS signals to be populated. See [Requesting Location Permission](#requesting-location-permission).
 
 ---
 
-### Entitlements
+### 2. Entitlements
 
-**Access WiFi Information** — allows the SDK to collect network identity signals.
+**Access WiFi Information** — enables network identity signals.
 
-1. In Xcode select your target → **Signing & Capabilities**
+1. Select your target → **Signing & Capabilities** tab
 2. Click **+ Capability**
-3. Add **Access WiFi Information**
+3. Search for and add **Access WiFi Information**
 
-This adds `com.apple.developer.networking.wifi-info` to your `.entitlements` file.
+This adds the following to your `.entitlements` file automatically:
+```xml
+<key>com.apple.developer.networking.wifi-info</key>
+<true/>
+```
 
-**iCloud** — improves cross-device identity signals.
+**iCloud / CloudKit** — improves cross-device identity signal accuracy.
 
-1. In **Signing & Capabilities** click **+ Capability**
-2. Add **iCloud**
-3. Enable **CloudKit**
+1. **Signing & Capabilities** → **+ Capability** → **iCloud**
+2. Under iCloud, tick **CloudKit**
 
 ---
 
-## Integration Steps
+### Requesting Location Permission
 
-### Step 1 — Import the SDK
+The SDK does not request location permission on its own. If you want GPS signals, request permission before calling `fetchIntelligence()`:
 
-In every file where you use the SDK:
+```swift
+import CoreLocation
+
+class LocationHelper: NSObject, CLLocationManagerDelegate {
+    private let manager = CLLocationManager()
+
+    func requestPermission() {
+        manager.delegate = self
+        manager.requestWhenInUseAuthorization()
+    }
+}
+```
+
+Or with SwiftUI:
+
+```swift
+import CoreLocation
+
+struct ContentView: View {
+    @StateObject private var locationManager = LocationManager()
+
+    var body: some View {
+        Text("Hello")
+            .onAppear {
+                locationManager.requestPermission()
+            }
+    }
+}
+
+class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+    private let manager = CLLocationManager()
+    override init() {
+        super.init()
+        manager.delegate = self
+    }
+    func requestPermission() {
+        manager.requestWhenInUseAuthorization()
+    }
+}
+```
+
+---
+
+## SDK Integration
+
+### Step 1 — Import
+
+Add this import at the top of every file that uses the SDK:
 
 ```swift
 import OTPlessIntelligence
@@ -158,13 +231,13 @@ import OTPlessIntelligence
 
 ---
 
-### Step 2 — Configure at App Launch
+### Step 2 — Configure
 
-Call `configure` **once**, as early as possible — ideally in `AppDelegate` or your app's entry point.
+Call `configure(appID:completion:)` **once**, as early as possible — in `AppDelegate` or your SwiftUI `@main` struct's `init()`.
 
-Only your `appID` is needed. The SDK fetches credentials automatically from the OTPless platform.
+Only your `appID` is required. The SDK fetches its own credentials from the OTPless platform automatically.
 
-**AppDelegate (UIKit)**
+**UIKit — AppDelegate**
 
 ```swift
 import UIKit
@@ -181,9 +254,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         if #available(iOS 15.0, *) {
             OTPlessIntelligence.shared.configure(appID: "YOUR_APP_ID") { success in
                 if success {
-                    print("[OTPless] Intelligence SDK ready")
+                    print("OTPless Intelligence SDK ready")
                 } else {
-                    print("[OTPless] Intelligence SDK failed to initialise")
+                    print("OTPless Intelligence SDK failed to initialise — check console for [OTPless] logs")
                 }
             }
         }
@@ -193,7 +266,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 }
 ```
 
-**SwiftUI App**
+**SwiftUI — App Entry Point**
 
 ```swift
 import SwiftUI
@@ -205,7 +278,7 @@ struct MyApp: App {
     init() {
         if #available(iOS 15.0, *) {
             OTPlessIntelligence.shared.configure(appID: "YOUR_APP_ID") { success in
-                print("[OTPless] SDK ready: \(success)")
+                print("OTPless Intelligence SDK ready: \(success)")
             }
         }
     }
@@ -218,63 +291,118 @@ struct MyApp: App {
 }
 ```
 
-> **Where do I find my `appID`?**  
-> Log in to the [OTPless Dashboard](https://otpless.com/dashboard), navigate to your app, and copy the App ID shown on the settings page.
+**What happens during configure:**
+
+```
+configure(appID: "YOUR_APP_ID")
+    │
+    ├─ Generates session tracking ID (tsId)
+    ├─ Restores installation ID (inId) from UserDefaults
+    ├─ Restores state token from Keychain (if previously saved)
+    │
+    └─ GET platform.otpless.app/sdk/v1/device-fingerprint/config
+           header: appId = YOUR_APP_ID
+           query:  packageName = your.bundle.id, platform = IOS
+           ↓
+           { intelligenceClientId, secret }
+           ↓
+       IdentitySDK.initAsync(clientId, secret)  →  fingerprint.otpless.com
+           ↓
+       completion(true / false)
+```
+
+> **Where is my App ID?**  
+> Log into the [OTPless Dashboard](https://otpless.com/dashboard) → select your app → copy the App ID from the Settings page.
 
 ---
 
 ### Step 3 — Update User Context (Optional)
 
-Call `updateOptions` to enrich the intelligence data with user-specific signals. This is optional but improves fraud detection accuracy.
+Call `updateOptions()` to attach user-specific information to the next `fetchIntelligence()` call. This improves fraud detection accuracy.
 
-Call it **before** `fetchIntelligence`, especially at key moments like login, signup, or transaction initiation.
+**Call this before `fetchIntelligence()`**, especially at key events like login, signup, or checkout.
 
 ```swift
 if #available(iOS 15.0, *) {
     OTPlessIntelligence.shared.updateOptions(
-        userId: "user_123",
-        phoneNumber: "+919876543210",       // E.164 format
+        userId: "user_123",              // your internal user/account ID
+        phoneNumber: "+919876543210",    // E.164 format
         additionalAttributes: [
-            "eventType": "LOGIN",           // LOGIN | SIGNUP | TRANSACTION
+            "eventType": "LOGIN",        // custom key-value pairs
             "signupMethod": "OTP"
         ]
     )
 }
 ```
 
-All parameters are optional — pass only what you have:
+All three parameters are optional — pass only what you have:
 
 ```swift
-// Just the userId
-OTPlessIntelligence.shared.updateOptions(userId: currentUser.id)
+// Only userId, nothing else
+OTPlessIntelligence.shared.updateOptions(userId: "user_123")
 
-// Just additional attributes
+// Only phone number
+OTPlessIntelligence.shared.updateOptions(phoneNumber: "+919876543210")
+
+// Only custom attributes
 OTPlessIntelligence.shared.updateOptions(
-    additionalAttributes: ["screen": "checkout"]
+    additionalAttributes: ["screen": "checkout", "amount": "5000"]
 )
 ```
 
-> **Note:** Options are reset after each `getIntelligence` call inside the SDK. If you need them for the next call, set them again before calling `fetchIntelligence`.
+> **Note:** Options reset after each `fetchIntelligence()` call. If you need them for the next call too, set them again.
 
 ---
 
 ### Step 4 — Fetch Intelligence
 
-Call `fetchIntelligence` at any point where you need a risk assessment — login screen, before a transaction, on a sensitive screen.
+Call `fetchIntelligence()` at any point where you need a risk assessment.
+
+**Recommended call sites:**
+- Login screen — before showing the OTP input
+- Transaction screen — before processing payment
+- Signup screen — before account creation
+- Any screen that handles sensitive data
 
 ```swift
 if #available(iOS 15.0, *) {
     OTPlessIntelligence.shared.fetchIntelligence { result in
-        switch result {
-        case .success(let data):
-            // Use data.response
-            self.handleIntelligenceResponse(data.response)
-
-        case .failure(let error):
-            self.handleIntelligenceError(error)
+        // Completion is called on a background thread.
+        // Dispatch to main if you update UI here.
+        DispatchQueue.main.async {
+            switch result {
+            case .success(let data):
+                self.handleIntelligenceResponse(data.response)
+            case .failure(let error):
+                self.handleIntelligenceError(error)
+            }
         }
     }
 }
+```
+
+**What happens during fetchIntelligence:**
+
+```
+fetchIntelligence()
+    │
+    ├─ Guard: sdkInitialized == true (else returns .notConfigured error)
+    │
+    ├─ IdentitySDK.getIntelligence()  →  fingerprint.otpless.com
+    │       Collects: jailbreak, VPN, GPS, IP, tampering, hooking,
+    │                 screen mirror, clone, factory reset, device meta…
+    │
+    ├─ On success:
+    │    ├─ POST platform.otpless.app/sdk/v1/device-fingerprint
+    │    │       header: appId
+    │    │       body:   { tsId, inId, appId, gaId, platform, state?, data }
+    │    │       ← { dfrId }  (stored for auth session linking)
+    │    │
+    │    └─ completion(.success(OTPlessIntelligenceResult))
+    │
+    └─ On error:
+         ├─ POST platform.otpless.app/sdk/v1/device-fingerprint  (error payload)
+         └─ completion(.failure(OTPlessIntelligenceError))
 ```
 
 ---
@@ -282,109 +410,125 @@ if #available(iOS 15.0, *) {
 ### Step 5 — Handle the Response
 
 ```swift
-func handleIntelligenceResponse(_ response: OTPlessIntelligenceResponse) {
+func handleIntelligenceResponse(_ r: OTPlessIntelligenceResponse) {
 
-    // ── Core risk flags ──────────────────────────────────────────────
-    print("Device ID   : \(response.deviceId)")
-    print("Request ID  : \(response.requestId)")
-    print("IP Address  : \(response.ip)")
+    // ── Identifiers ──────────────────────────────────────────────────
+    print("requestId : \(r.requestId)")   // unique ID for this call
+    print("deviceId  : \(r.deviceId)")   // persistent device identifier
+    print("ip        : \(r.ip)")          // current public IP
 
-    print("Jailbroken  : \(response.jailbroken)")
-    print("Simulator   : \(response.simulator)")
-    print("VPN active  : \(response.vpn)")
-    print("Proxy       : \(response.proxy)")
-    print("Geo spoofed : \(response.geoSpoofed)")
-    print("App tampered: \(response.appTampering)")
-    print("Hooking     : \(response.hooking)")
-    print("Mirrored    : \(response.mirroredScreen)")
-    print("Cloned app  : \(response.cloned)")
-    print("New device  : \(response.newDevice)")
-    print("Fact. reset : \(response.factoryReset)")
+    // ── Risk flags ───────────────────────────────────────────────────
+    print("simulator    : \(r.simulator)")     // running in Xcode Simulator
+    print("jailbroken   : \(r.jailbroken)")    // device is jailbroken
+    print("vpn          : \(r.vpn)")           // VPN active
+    print("proxy        : \(r.proxy)")         // HTTP proxy active
+    print("geoSpoofed   : \(r.geoSpoofed)")   // GPS being faked
+    print("appTampering : \(r.appTampering)")  // app binary modified
+    print("hooking      : \(r.hooking)")       // Frida / Substrate detected
+    print("mirroredScreen: \(r.mirroredScreen)") // screen recording/mirroring
+    print("cloned       : \(r.cloned)")        // cloned app instance
+    print("newDevice    : \(r.newDevice)")     // first time device seen
+    print("factoryReset : \(r.factoryReset)")  // suspicious factory reset
+    print("factoryResetTime: \(r.factoryResetTime)") // epoch seconds
 
-    // ── High-risk check ──────────────────────────────────────────────
-    let isHighRisk = response.jailbroken
-        || response.appTampering
-        || response.hooking
-        || response.cloned
-
-    if isHighRisk {
-        // Block the action or present a challenge
-        showSecurityChallenge()
-        return
-    }
-
-    // ── Server-side rule decision ────────────────────────────────────
-    // Present only when rules are configured on the OTPless dashboard.
-    if let rule = response.ruleAction {
-        print("Rule action : \(rule.action ?? "")")
-        print("Rule name   : \(rule.name ?? "")")
-        print("Message     : \(rule.message ?? "")")
+    // ── Server-side rule decision ─────────────────────────────────────
+    // Only present when rules are configured on the OTPless dashboard.
+    if let rule = r.ruleAction {
+        print("rule.action      : \(rule.action ?? "")")
+        print("rule.name        : \(rule.name ?? "")")
+        print("rule.description : \(rule.ruleDescription ?? "")")
+        print("rule.message     : \(rule.message ?? "")")
 
         switch rule.action {
         case "BLOCK":
-            blockUser(reason: rule.message)
+            showBlockedMessage(rule.message ?? "Access denied.")
+            return
         case "CHALLENGE":
-            presentOTPChallenge()
+            triggerOTPChallenge()
+            return
         default:
-            proceedNormally()
+            break
         }
-        return
     }
 
     // ── GPS location ─────────────────────────────────────────────────
-    if let gps = response.gpsLocation {
-        print("GPS: \(gps.latitude ?? 0), \(gps.longitude ?? 0)")
+    if let gps = r.gpsLocation {
+        print("latitude  : \(gps.latitude ?? 0)")
+        print("longitude : \(gps.longitude ?? 0)")
+        print("altitude  : \(gps.altitude ?? 0)")
     }
 
-    // ── IP details ───────────────────────────────────────────────────
-    if let ip = response.ipDetails {
-        print("City        : \(ip.city ?? "")")
-        print("Country     : \(ip.country ?? "")")
-        print("ISP         : \(ip.isp ?? "")")
-        print("IP fraud score: \(ip.fraudScore ?? 0)")
+    // ── IP intelligence ───────────────────────────────────────────────
+    if let ip = r.ipDetails {
+        print("city       : \(ip.city ?? "")")
+        print("region     : \(ip.region ?? "")")
+        print("country    : \(ip.country ?? "")")
+        print("isp        : \(ip.isp ?? "")")
+        print("asn        : \(ip.asn ?? "")")
+        print("fraudScore : \(ip.fraudScore ?? 0)")  // 0 = clean, 100 = high risk
     }
 
-    // ── Device metadata ──────────────────────────────────────────────
-    if let meta = response.deviceMeta {
-        print("Model  : \(meta.model ?? "")")
-        print("iOS    : \(meta.iOSVersion ?? "")")
-        print("RAM    : \(meta.totalRAM ?? "")")
+    // ── Device metadata ───────────────────────────────────────────────
+    if let meta = r.deviceMeta {
+        print("model      : \(meta.model ?? "")")
+        print("iOSVersion : \(meta.iOSVersion ?? "")")
+        print("totalRAM   : \(meta.totalRAM ?? "")")
+        print("storage    : \(meta.storageAvailable ?? "") / \(meta.storageTotal ?? "")")
     }
 
+    // ── Your risk logic ───────────────────────────────────────────────
+    let isHighRisk = r.jailbroken || r.appTampering || r.hooking || r.cloned
+    if isHighRisk {
+        // Block the action, show warning, or step up authentication
+        presentSecurityChallenge()
+        return
+    }
+
+    if r.vpn || r.proxy {
+        // Log for analytics — may or may not block depending on your policy
+        logSecurityEvent("vpn_or_proxy_detected", deviceId: r.deviceId)
+    }
+
+    // All clear — proceed
     proceedNormally()
 }
 
 func handleIntelligenceError(_ error: OTPlessIntelligenceError) {
     switch error {
     case .notConfigured:
-        // configure() was never called or failed
-        print("[OTPless] SDK not configured — call configure(appID:) first")
+        // configure() was not called or failed
+        // This should not happen in production — fix by calling configure() at launch
+        print("[OTPless] SDK not configured")
 
     case .intelligenceError(let requestId, let message):
-        // The SDK or server returned an error
+        // The engine or server returned an error
+        // Log requestId for debugging — share with OTPless support if needed
         print("[OTPless] Error [\(requestId)]: \(message)")
+        // Degrade gracefully — allow the user to proceed
+        proceedNormally()
 
     case .unknown:
         print("[OTPless] Unknown error")
+        proceedNormally()
     }
 }
 ```
 
 ---
 
-### Step 6 — Link Auth Session (OTPless Auth users)
+### Step 6 — Link Auth Session (OTPless Auth Users Only)
 
-If you also use the **OTPless Auth SDK** (`OtplessBM`), call this after a successful authentication. It links the device fingerprint record to the auth event on the backend, enabling end-to-end fraud correlation.
+If your app also uses the **OTPless Auth SDK**, call this after a successful authentication. It links the device fingerprint record (`dfrId`) to the auth session on the backend, enabling end-to-end fraud correlation.
 
 ```swift
-// Call this after your OTPless auth flow completes successfully
+// Call this inside your OTPless auth success callback
 OTPlessIntelligence.shared.updateAuthSessionWithIntelligence(authMap: [
     "asId": authSessionId,   // Auth Session ID from OTPless auth response
     "token": authToken       // Token from OTPless auth response
 ])
 ```
 
-> This call is a no-op if `fetchIntelligence` hasn't been called yet in the current session. Always call `fetchIntelligence` before `updateAuthSessionWithIntelligence`.
+> This is a no-op if `fetchIntelligence()` has not been successfully called in the current session. Always call `fetchIntelligence()` first.
 
 ---
 
@@ -392,7 +536,7 @@ OTPlessIntelligence.shared.updateAuthSessionWithIntelligence(authMap: [
 
 ### `OTPlessIntelligence.shared`
 
-The singleton entry point for all SDK operations.
+The singleton used for all SDK operations.
 
 ---
 
@@ -406,17 +550,17 @@ public func configure(
 )
 ```
 
-Initialises the SDK. Must be called **once** before any other method.
+Initialises the SDK. Must be called **once before any other method**.
 
-Internally this:
-1. Generates a session tracking ID and restores any persisted state
-2. Fetches `intelligenceClientId` + `secret` from `platform.otpless.app` using your `appID`
-3. Initialises the underlying IdentityFraud engine with those credentials
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `appID` | `String` | Yes | Your OTPless App ID from the dashboard |
+| `completion` | `(Bool) -> Void` | Yes | Called on any thread. `true` = ready, `false` = failed |
 
-| Parameter | Type | Description |
-|---|---|---|
-| `appID` | `String` | Your OTPless App ID from the dashboard |
-| `completion` | `(Bool) -> Void` | Called on any thread. `true` = ready, `false` = failed |
+**Notes:**
+- `completion` is called on an internal background thread. Dispatch to `DispatchQueue.main` before touching UI.
+- If `appID` is empty, `completion(false)` is called immediately.
+- Console logs prefixed `[OTPless]` show detailed progress and error reasons.
 
 ---
 
@@ -431,12 +575,12 @@ public func updateOptions(
 )
 ```
 
-Enriches the next `fetchIntelligence` call with user-specific context. All parameters are optional.
+Enriches the next intelligence call with user context. All parameters are optional.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `userId` | `String?` | Your internal user / account ID |
-| `phoneNumber` | `String?` | User's phone number in E.164 format |
+| `userId` | `String?` | Your internal user or account ID |
+| `phoneNumber` | `String?` | User's phone number (E.164 format, e.g. `+919876543210`) |
 | `additionalAttributes` | `[String: String]?` | Any custom key-value pairs |
 
 ---
@@ -450,11 +594,16 @@ public func fetchIntelligence(
 )
 ```
 
-Runs the device intelligence assessment and returns a result. Also automatically pushes the raw signals to the OTPless backend.
+Runs the device intelligence assessment.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `completion` | `(Result<OTPlessIntelligenceResult, OTPlessIntelligenceError>) -> Void` | Called on any thread with success or failure |
+| `completion` | `(Result<OTPlessIntelligenceResult, OTPlessIntelligenceError>) -> Void` | Called on any thread |
+
+**Notes:**
+- Returns `.failure(.notConfigured)` immediately if `configure()` has not succeeded.
+- Automatically pushes raw signals to the OTPless backend (with retry — up to 5 attempts, exponential backoff starting at 100ms).
+- `completion` is called on an internal thread. Use `DispatchQueue.main.async` before any UI update.
 
 ---
 
@@ -464,12 +613,12 @@ Runs the device intelligence assessment and returns a result. Also automatically
 public func updateAuthSessionWithIntelligence(authMap: [String: String])
 ```
 
-Links the device fingerprint to an OTPless auth session. Only fires if `fetchIntelligence` has already succeeded in this session.
+Links the device fingerprint to an OTPless auth session.
 
 | Key | Description |
 |---|---|
-| `"asId"` | Auth Session ID from OTPless auth SDK |
-| `"token"` | Token from OTPless auth SDK |
+| `"asId"` | Auth Session ID from OTPless auth response |
+| `"token"` | Token from OTPless auth response |
 
 ---
 
@@ -479,89 +628,147 @@ Links the device fingerprint to an OTPless auth session. Only fires if `fetchInt
 @objc public func gettsID() -> String
 ```
 
-Returns the current session tracking ID (`tsId`). Useful for correlating logs.
+Returns the current session tracking ID (`tsId`). Useful for correlating your own logs with OTPless backend records.
 
 ---
 
 ## Response Reference
 
+### `OTPlessIntelligenceResult`
+
+```swift
+public struct OTPlessIntelligenceResult {
+    public let response: OTPlessIntelligenceResponse
+}
+```
+
+Wrapper returned from `fetchIntelligence()`. Access the intelligence data via `.response`.
+
+---
+
 ### `OTPlessIntelligenceResponse`
 
 | Property | Type | Description |
 |---|---|---|
-| `requestId` | `String` | Unique ID for this specific intelligence call |
-| `deviceId` | `String` | Persistent unique identifier for the device |
-| `ip` | `String` | Current public IP address of the device |
-| `simulator` | `Bool` | `true` if running inside Xcode Simulator |
-| `jailbroken` | `Bool` | `true` if the device has been jailbroken |
-| `vpn` | `Bool` | `true` if a VPN is currently active |
-| `geoSpoofed` | `Bool` | `true` if GPS location appears to be faked |
-| `appTampering` | `Bool` | `true` if the app binary has been modified |
-| `hooking` | `Bool` | `true` if runtime hooking (Frida / Substrate) is detected |
-| `proxy` | `Bool` | `true` if an HTTP/S proxy is in use |
-| `mirroredScreen` | `Bool` | `true` if the screen is being recorded or mirrored |
-| `cloned` | `Bool` | `true` if this is a cloned instance of the app |
-| `newDevice` | `Bool` | `true` if this device has never been seen before |
-| `factoryReset` | `Bool` | `true` if a suspicious factory reset was detected |
-| `factoryResetTime` | `Int` | Unix epoch (seconds) of the last factory reset |
-| `gpsLocation` | `GPSLocation?` | Current GPS coordinates (if location permission is granted) |
-| `ipDetails` | `IPDetails?` | Enriched IP intelligence |
-| `deviceMeta` | `DeviceMeta?` | Hardware and OS metadata |
-| `ruleAction` | `OTPlessRuleAction?` | Server-side rule decision (only present if rules are configured in the dashboard) |
+| `requestId` | `String` | Unique ID for this intelligence call. Use for debugging and support. |
+| `deviceId` | `String` | Persistent unique identifier for the device. Stable across app sessions. |
+| `ip` | `String` | Current public IP address of the device. |
+| `simulator` | `Bool` | `true` when running inside Xcode Simulator. |
+| `jailbroken` | `Bool` | `true` when the device has been jailbroken (root access). |
+| `vpn` | `Bool` | `true` when a VPN is currently active. |
+| `geoSpoofed` | `Bool` | `true` when GPS location appears to be mocked or faked. |
+| `appTampering` | `Bool` | `true` when the app binary has been modified from the original. |
+| `hooking` | `Bool` | `true` when runtime hooking (Frida, Substrate) is detected. |
+| `proxy` | `Bool` | `true` when an HTTP/S proxy is configured on the device. |
+| `mirroredScreen` | `Bool` | `true` when the device screen is being recorded or mirrored externally. |
+| `cloned` | `Bool` | `true` when this is a cloned or repackaged instance of the app. |
+| `newDevice` | `Bool` | `true` when this device has never been seen by OTPless before. |
+| `factoryReset` | `Bool` | `true` when a suspicious factory reset has been recently performed. |
+| `factoryResetTime` | `Int` | Unix epoch (seconds) of the last detected factory reset. `0` if never. |
+| `gpsLocation` | `GPSLocation?` | GPS coordinates. `nil` if location permission not granted. |
+| `ipDetails` | `IPDetails?` | Enriched IP intelligence — location, ISP, fraud score. |
+| `deviceMeta` | `DeviceMeta?` | Hardware and OS information. |
+| `ruleAction` | `OTPlessRuleAction?` | Server-side rule decision. `nil` if no rules are configured. |
 
 ---
 
 ### `GPSLocation`
 
+```swift
+public class GPSLocation: NSObject, Codable {
+    public var latitude: NSNumber?   // decimal degrees
+    public var longitude: NSNumber?  // decimal degrees
+    public var altitude: NSNumber?   // metres
+}
+```
+
 | Property | Type | Description |
 |---|---|---|
-| `latitude` | `NSNumber?` | Latitude in decimal degrees |
-| `longitude` | `NSNumber?` | Longitude in decimal degrees |
-| `altitude` | `NSNumber?` | Altitude in metres |
+| `latitude` | `NSNumber?` | Latitude in decimal degrees (e.g. `28.6139`) |
+| `longitude` | `NSNumber?` | Longitude in decimal degrees (e.g. `77.2090`) |
+| `altitude` | `NSNumber?` | Altitude in metres above sea level |
 
 ---
 
 ### `IPDetails`
 
+```swift
+public class IPDetails: NSObject, Codable {
+    public var city: String?
+    public var region: String?
+    public var country: String?
+    public var isp: String?
+    public var asn: String?
+    public var fraudScore: NSNumber?
+    public var latitude: NSNumber?
+    public var longitude: NSNumber?
+}
+```
+
 | Property | Type | Description |
 |---|---|---|
-| `city` | `String?` | City resolved from the IP |
-| `region` | `String?` | Region / state |
-| `country` | `String?` | ISO 3166-1 country code (e.g. `"IN"`) |
+| `city` | `String?` | City resolved from the IP (e.g. `"Mumbai"`) |
+| `region` | `String?` | State or region (e.g. `"Maharashtra"`) |
+| `country` | `String?` | ISO 3166-1 alpha-2 country code (e.g. `"IN"`) |
 | `isp` | `String?` | Internet Service Provider name |
 | `asn` | `String?` | Autonomous System Number |
-| `latitude` | `NSNumber?` | IP-based latitude |
-| `longitude` | `NSNumber?` | IP-based longitude |
-| `fraudScore` | `NSNumber?` | IP fraud score (0 = clean, 100 = high risk) |
+| `fraudScore` | `NSNumber?` | IP fraud score: `0` = clean, `100` = very high risk |
+| `latitude` | `NSNumber?` | Approximate latitude based on IP geolocation |
+| `longitude` | `NSNumber?` | Approximate longitude based on IP geolocation |
 
 ---
 
 ### `DeviceMeta`
 
+```swift
+public class DeviceMeta: NSObject, Codable {
+    public var brand: String?
+    public var model: String?
+    public var product: String?
+    public var cpuType: String?
+    public var iOSVersion: String?
+    public var screenResolution: String?
+    public var totalRAM: String?
+    public var storageAvailable: String?
+    public var storageTotal: String?
+}
+```
+
 | Property | Type | Description |
 |---|---|---|
-| `brand` | `String?` | Device manufacturer (e.g. `"Apple"`) |
-| `model` | `String?` | Device model (e.g. `"iPhone15,2"`) |
+| `brand` | `String?` | Manufacturer (always `"Apple"` on iOS) |
+| `model` | `String?` | Device model identifier (e.g. `"iPhone15,2"`) |
 | `product` | `String?` | Product name |
 | `cpuType` | `String?` | CPU architecture (e.g. `"arm64"`) |
 | `iOSVersion` | `String?` | iOS version string (e.g. `"17.4.1"`) |
-| `screenResolution` | `String?` | Screen resolution (e.g. `"1179x2556"`) |
-| `totalRAM` | `String?` | Total RAM in bytes as a string |
-| `storageAvailable` | `String?` | Available storage in bytes as a string |
-| `storageTotal` | `String?` | Total storage in bytes as a string |
+| `screenResolution` | `String?` | Resolution in pixels (e.g. `"1179x2556"`) |
+| `totalRAM` | `String?` | Total physical RAM in bytes as a string |
+| `storageAvailable` | `String?` | Free storage in bytes as a string |
+| `storageTotal` | `String?` | Total storage capacity in bytes as a string |
 
 ---
 
 ### `OTPlessRuleAction`
 
-Returned when the OTPless backend matches the device against a configured rule.
+Returned when the OTPless backend evaluates configured rules against the device signals.
+
+```swift
+public class OTPlessRuleAction: NSObject, Codable {
+    public let action: String?
+    public let name: String?
+    public let ruleDescription: String?
+    public let message: String?
+}
+```
 
 | Property | Type | Description |
 |---|---|---|
-| `action` | `String?` | Action to take: `"BLOCK"`, `"CHALLENGE"`, `"ALLOW"`, etc. |
-| `name` | `String?` | Name of the rule that fired |
-| `ruleDescription` | `String?` | Why the rule fired |
-| `message` | `String?` | User-facing message to display |
+| `action` | `String?` | Action the SDK should take: `"BLOCK"`, `"CHALLENGE"`, `"ALLOW"`, or a custom value |
+| `name` | `String?` | Name of the rule that fired (as configured in the dashboard) |
+| `ruleDescription` | `String?` | Technical description of why the rule fired |
+| `message` | `String?` | User-facing message you can display in your UI |
+
+> `ruleAction` is `nil` when no rules are configured, or when none of the configured rules matched the device. Always check for `nil` before accessing properties.
 
 ---
 
@@ -577,29 +784,172 @@ public enum OTPlessIntelligenceError: Error {
 }
 ```
 
-| Case | When it occurs | What to do |
+| Case | When it occurs | Recommended action |
 |---|---|---|
-| `notConfigured` | `fetchIntelligence` called before `configure` succeeded | Ensure `configure(appID:)` is called at app launch and `completion` returned `true` |
-| `intelligenceError(requestId:message:)` | SDK or server returned an error | Log `requestId` for debugging; retry or degrade gracefully |
-| `unknown` | Unexpected internal state | Retry; contact support if persistent |
+| `notConfigured` | `fetchIntelligence()` was called before `configure()` completed successfully | Ensure `configure(appID:)` is called at app launch and `completion` returned `true` before calling `fetchIntelligence()` |
+| `intelligenceError(requestId:message:)` | The fingerprinting engine or backend returned an error | Log `requestId` for debugging. Degrade gracefully — allow the user to proceed |
+| `unknown` | Unexpected internal state | Degrade gracefully. If persistent, contact support |
+
+**Pattern: always degrade gracefully**
+
+```swift
+case .failure(let error):
+    // Log the error
+    logError(error)
+
+    // Do NOT block the user for an intelligence failure
+    // The intelligence call failing should not prevent a legitimate user from continuing
+    proceedWithoutRiskCheck()
+```
 
 ---
 
-## Objective-C Usage
+## SwiftUI Integration
 
-All public types are `@objcMembers` and `NSObject` subclasses — fully accessible from Objective-C.
+A complete SwiftUI example:
+
+```swift
+import SwiftUI
+import OTPlessIntelligence
+
+// ── App Entry Point ───────────────────────────────────────────────────────────
+
+@main
+struct MyApp: App {
+    init() {
+        if #available(iOS 15.0, *) {
+            OTPlessIntelligence.shared.configure(appID: "YOUR_APP_ID") { success in
+                print("OTPless ready: \(success)")
+            }
+        }
+    }
+    var body: some Scene {
+        WindowGroup { LoginView() }
+    }
+}
+
+// ── ViewModel ─────────────────────────────────────────────────────────────────
+
+@MainActor
+class LoginViewModel: ObservableObject {
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    @Published var isBlocked = false
+    @Published var blockMessage = ""
+
+    func runDeviceCheck() {
+        guard #available(iOS 15.0, *) else { return }
+        isLoading = true
+
+        OTPlessIntelligence.shared.updateOptions(
+            additionalAttributes: ["screen": "login"]
+        )
+
+        OTPlessIntelligence.shared.fetchIntelligence { [weak self] result in
+            Task { @MainActor in
+                guard let self else { return }
+                self.isLoading = false
+
+                switch result {
+                case .success(let data):
+                    self.handleResponse(data.response)
+                case .failure(let error):
+                    // Intelligence failure — degrade gracefully
+                    print("Intelligence error: \(error)")
+                }
+            }
+        }
+    }
+
+    private func handleResponse(_ r: OTPlessIntelligenceResponse) {
+        // Server rule takes priority
+        if let rule = r.ruleAction, rule.action == "BLOCK" {
+            isBlocked = true
+            blockMessage = rule.message ?? "Access denied."
+            return
+        }
+
+        // Local high-risk check
+        if r.jailbroken || r.appTampering || r.hooking {
+            isBlocked = true
+            blockMessage = "This device does not meet our security requirements."
+            return
+        }
+    }
+}
+
+// ── View ──────────────────────────────────────────────────────────────────────
+
+struct LoginView: View {
+    @StateObject private var vm = LoginViewModel()
+
+    var body: some View {
+        ZStack {
+            if vm.isLoading {
+                ProgressView("Checking device security…")
+            } else if vm.isBlocked {
+                BlockedView(message: vm.blockMessage)
+            } else {
+                LoginFormView()
+            }
+        }
+        .onAppear {
+            vm.runDeviceCheck()
+        }
+    }
+}
+
+struct BlockedView: View {
+    let message: String
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.shield.fill")
+                .font(.system(size: 60))
+                .foregroundColor(.red)
+            Text(message)
+                .multilineTextAlignment(.center)
+                .padding()
+        }
+    }
+}
+
+struct LoginFormView: View {
+    var body: some View {
+        Text("Login Form")
+    }
+}
+```
+
+---
+
+## Objective-C Integration
+
+All public types are `@objcMembers NSObject` subclasses — fully usable from Objective-C.
+
+**Import:**
+
+```objc
+// In your .m / .mm file
+#import <OTPlessIntelligence/OTPlessIntelligence-Swift.h>
+
+// Or if using CocoaPods with module
+@import OTPlessIntelligence;
+```
 
 **Configure:**
 
 ```objc
-#import <OTPlessIntelligence/OTPlessIntelligence-Swift.h>
+// AppDelegate.m
+- (BOOL)application:(UIApplication *)application
+    didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
 
-// In AppDelegate
-if (@available(iOS 15.0, *)) {
-    [[OTPlessIntelligence shared] configureWithAppID:@"YOUR_APP_ID"
-                                          completion:^(BOOL success) {
-        NSLog(@"Intelligence SDK ready: %@", success ? @"YES" : @"NO");
-    }];
+    if (@available(iOS 15.0, *)) {
+        [[OTPlessIntelligence shared] configureWithAppID:@"YOUR_APP_ID"
+                                              completion:^(BOOL success) {
+            NSLog(@"[OTPless] SDK ready: %@", success ? @"YES" : @"NO");
+        }];
+    }
+    return YES;
 }
 ```
 
@@ -607,196 +957,225 @@ if (@available(iOS 15.0, *)) {
 
 ```objc
 if (@available(iOS 15.0, *)) {
-    [[OTPlessIntelligence shared] updateOptionsWithUserId:@"user_123"
-                                             phoneNumber:@"+919876543210"
-                                    additionalAttributes:@{@"eventType": @"LOGIN"}];
+    [[OTPlessIntelligence shared]
+        updateOptionsWithUserId:@"user_123"
+        phoneNumber:@"+919876543210"
+        additionalAttributes:@{@"eventType": @"LOGIN"}];
 }
 ```
 
 **Fetch intelligence:**
 
-```objc
-if (@available(iOS 15.0, *)) {
-    [[OTPlessIntelligence shared] fetchIntelligence:^(id result) {
-        // result is a Swift Result type — use the Swift wrapper or bridge via a helper
-    }];
-}
-```
-
-> For Objective-C projects, consider writing a thin Swift wrapper around `fetchIntelligence` that calls the completion with a plain `NSDictionary` or `NSError` — Swift `Result` types are less ergonomic in ObjC.
-
----
-
-## Complete Example
-
-A minimal but complete Swift example showing all steps together:
+> Swift `Result` types are not directly bridged to Objective-C. Create a thin Swift wrapper:
 
 ```swift
-import UIKit
+// IntelligenceBridge.swift — add this to your project
 import OTPlessIntelligence
 
-// ── AppDelegate ──────────────────────────────────────────────────────────────
+@objc class IntelligenceBridge: NSObject {
 
-@main
-class AppDelegate: UIResponder, UIApplicationDelegate {
-
-    func application(
-        _ application: UIApplication,
-        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-    ) -> Bool {
-        if #available(iOS 15.0, *) {
-            OTPlessIntelligence.shared.configure(appID: "YOUR_APP_ID") { success in
-                print("[OTPless] SDK initialised: \(success)")
-            }
-        }
-        return true
-    }
-}
-
-// ── LoginViewController ──────────────────────────────────────────────────────
-
-class LoginViewController: UIViewController {
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        runDeviceCheck()
-    }
-
-    private func runDeviceCheck() {
-        guard #available(iOS 15.0, *) else { return }
-
-        // Enrich with user context (optional)
-        OTPlessIntelligence.shared.updateOptions(
-            userId: nil,                         // not known before login
-            additionalAttributes: ["screen": "login"]
-        )
-
-        OTPlessIntelligence.shared.fetchIntelligence { [weak self] result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let data):
-                    self?.handleResponse(data.response)
-                case .failure(let error):
-                    self?.handleError(error)
+    @available(iOS 15.0, *)
+    @objc static func fetchIntelligence(
+        success: @escaping (OTPlessIntelligenceResponse) -> Void,
+        failure: @escaping (String) -> Void
+    ) {
+        OTPlessIntelligence.shared.fetchIntelligence { result in
+            switch result {
+            case .success(let data):
+                success(data.response)
+            case .failure(let error):
+                switch error {
+                case .intelligenceError(_, let message): failure(message)
+                default: failure("Intelligence error")
                 }
             }
         }
     }
-
-    private func handleResponse(_ r: OTPlessIntelligenceResponse) {
-        // Server-side rule — takes priority if present
-        if let rule = r.ruleAction, rule.action == "BLOCK" {
-            showAlert(title: "Access Denied", message: rule.message ?? "Request blocked.")
-            return
-        }
-
-        // Local risk check
-        if r.jailbroken || r.appTampering || r.hooking {
-            showAlert(title: "Security Warning", message: "This device does not meet security requirements.")
-            return
-        }
-
-        if r.vpn {
-            // Log for analytics but allow
-            print("[OTPless] VPN detected — deviceId: \(r.deviceId)")
-        }
-
-        // Proceed to login
-        showLoginForm()
-    }
-
-    private func handleError(_ error: OTPlessIntelligenceError) {
-        // Non-fatal — degrade gracefully
-        switch error {
-        case .notConfigured:
-            print("[OTPless] SDK not configured")
-        case .intelligenceError(let id, let msg):
-            print("[OTPless] [\(id)] \(msg)")
-        case .unknown:
-            print("[OTPless] Unknown error")
-        }
-        showLoginForm()   // allow login even if intelligence fails
-    }
-
-    private func showLoginForm() { /* show your login UI */ }
-
-    private func showAlert(title: String, message: String) {
-        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
-        present(alert, animated: true)
-    }
 }
+```
 
-// ── Post-auth (if using OTPless Auth SDK) ────────────────────────────────────
+Use from Objective-C:
 
-extension LoginViewController {
+```objc
+if (@available(iOS 15.0, *)) {
+    [IntelligenceBridge fetchIntelligenceWithSuccess:^(OTPlessIntelligenceResponse *response) {
+        NSLog(@"jailbroken: %d", response.jailbroken);
+        NSLog(@"vpn: %d", response.vpn);
+        NSLog(@"deviceId: %@", response.deviceId);
 
-    func onAuthSuccess(authSessionId: String, authToken: String) {
-        OTPlessIntelligence.shared.updateAuthSessionWithIntelligence(authMap: [
-            "asId": authSessionId,
-            "token": authToken
-        ])
-    }
+        if (response.jailbroken || response.appTampering) {
+            [self showSecurityWarning];
+        }
+    } failure:^(NSString *message) {
+        NSLog(@"Intelligence error: %@", message);
+    }];
 }
+```
+
+**Link auth session:**
+
+```objc
+[[OTPlessIntelligence shared]
+    updateAuthSessionWithIntelligence:@{
+        @"asId": authSessionId,
+        @"token": authToken
+    }];
+```
+
+---
+
+## Sequence Diagrams
+
+### Normal Flow
+
+```
+App                  OTPlessIntelligence      platform.otpless.app    fingerprint.otpless.com
+ │                          │                          │                        │
+ │── configure(appID) ─────>│                          │                        │
+ │                          │── GET /device-fingerprint/config ───────────────> │ (not here)
+ │                          │<──────── { clientId, secret } ────────────────────│
+ │                          │                                                   │
+ │                          │── IdentitySDK.initAsync(clientId, secret) ───────>│
+ │                          │<────────────── completion(true) ───────────────────│
+ │<── completion(true) ─────│                          │                        │
+ │                          │                          │                        │
+ │── fetchIntelligence() ──>│                          │                        │
+ │                          │── getIntelligence() ─────────────────────────────>│
+ │                          │<── onSuccess(IntelligenceResponse) ────────────────│
+ │                          │── POST /device-fingerprint ─────────────────────> │ (not here)
+ │                          │<──────── { dfrId } ──────│                        │
+ │<── .success(result) ─────│                          │                        │
+```
+
+### With OTPless Auth SDK
+
+```
+App                  OTPlessIntelligence         OtplessBM (Auth SDK)
+ │                          │                          │
+ │── configure(appID) ─────>│                          │
+ │                          │  (shares tsId with auth SDK via runtime bridge)
+ │                          │                          │
+ │── fetchIntelligence() ──>│                          │
+ │<── .success(result) ─────│                          │
+ │                          │                          │
+ │── [user completes auth] ─────────────────────────── │
+ │<── authSessionId, token ──────────────────────────── │
+ │                          │                          │
+ │── updateAuthSession(asId, token) ──>│               │
+ │                          │── POST /device-fingerprint (with dfrId + asId + token)
+ │                          │   (links device fingerprint ↔ auth session on backend)
 ```
 
 ---
 
 ## Troubleshooting
 
-### `configure` completion returns `false`
+### `completion(false)` from `configure()`
 
-- Check your `appID` — copy it directly from the OTPless dashboard
-- Ensure the device/simulator has internet connectivity
-- Check for SSL/firewall issues blocking `platform.otpless.app`
-- Check the Xcode console for any `[OTPless]` or `URLError` messages
+Check the Xcode console for `[OTPless]` logs. They will tell you exactly what failed.
 
-### `fetchIntelligence` returns `.notConfigured`
+**Check the logs for one of these patterns:**
 
-- `configure(appID:completion:)` must be called and the completion must return `true` before calling `fetchIntelligence`
-- Both methods require `iOS 15.0+` at runtime — check availability
+| Log message | Cause | Fix |
+|---|---|---|
+| `Config API error — status: 404` | App ID not found or iOS not enabled | Log into OTPless dashboard and verify the app ID and enable iOS intelligence |
+| `Config API error — status: 401` | App ID is invalid or expired | Check that your App ID is correct |
+| `Config request error — The Internet connection appears to be offline` | No network | Check device connectivity |
+| `IdentityFraud SDK initialisation failed` | Sign3 credentials rejected | Contact OTPless support with the `requestId` |
 
-### No GPS location in the response
+---
 
-- The user has not granted location permission
-- Request permission before calling `fetchIntelligence`:
+### `fetchIntelligence()` returns `.notConfigured`
+
+`configure()` has not completed successfully before `fetchIntelligence()` was called.
+
+**Common cause:** Calling `fetchIntelligence()` immediately after `configure()` without waiting for the completion callback.
 
 ```swift
-import CoreLocation
+// ❌ Wrong — fetchIntelligence() runs before configure() finishes
+OTPlessIntelligence.shared.configure(appID: "YOUR_APP_ID") { _ in }
+OTPlessIntelligence.shared.fetchIntelligence { result in ... }
 
-let manager = CLLocationManager()
-manager.requestWhenInUseAuthorization()
-// Then call fetchIntelligence after the user responds
+// ✅ Correct — wait for configure to complete
+OTPlessIntelligence.shared.configure(appID: "YOUR_APP_ID") { success in
+    guard success else { return }
+    OTPlessIntelligence.shared.fetchIntelligence { result in ... }
+}
+
+// ✅ Also correct — configure once at launch, fetchIntelligence later on a different screen
+// configure() is called in AppDelegate, fetchIntelligence() is called in LoginViewController
 ```
+
+---
+
+### GPS location is `nil` in the response
+
+Location permission has not been granted by the user.
+
+```swift
+// Request permission before calling fetchIntelligence
+import CoreLocation
+CLLocationManager().requestWhenInUseAuthorization()
+// Then call fetchIntelligence after the user has responded
+```
+
+---
 
 ### `ruleAction` is always `nil`
 
-- Rules are only returned if you have configured rules in the OTPless dashboard
-- If no rules are configured, this field will always be `nil` — this is expected
+Rules are not configured for your app in the OTPless dashboard. `ruleAction` is only populated when the backend matches the device against a configured rule. This is expected if you haven't set up rules yet.
 
-### Build error: `IdentityFraud module not found`
+---
 
-- If using CocoaPods, ensure you opened the `.xcworkspace`, not `.xcodeproj`
-- Run `pod install` again and clean the build folder (**Product → Clean Build Folder**)
-- If using SPM, ensure the `OTPlessIntelligence` package resolved correctly (File → Packages → Resolve Package Versions)
+### Build error: `No such module 'IdentityFraud'`
 
-### Simulator vs real device differences
+- **CocoaPods:** Make sure you opened `.xcworkspace` not `.xcodeproj`. Run `pod install` again if needed.
+- **SPM:** Go to **File → Packages → Resolve Package Versions** in Xcode.
+- **Clean build:** **Product → Clean Build Folder** (`⇧⌘K`), then build again.
 
-- `simulator: true` will always be set when running on an iOS Simulator
-- Some signals (GPS, cell carrier, certain hardware checks) are unavailable or return mock values in the Simulator
-- Always test on a real device before submitting to the App Store
+---
+
+### Signals show `false` / inaccurate on Simulator
+
+The Xcode Simulator is a controlled environment. Several signals behave differently:
+
+| Signal | Simulator behaviour |
+|---|---|
+| `simulator` | Always `true` |
+| `jailbroken` | Always `false` (Simulator cannot be jailbroken) |
+| `gpsLocation` | Returns Simulator's simulated location |
+| `ip` | Returns your Mac's IP |
+| Hardware signals (RAM, storage) | Returns Simulator host values |
+
+Always validate on a **real physical device** before submitting to the App Store.
+
+---
+
+### `completion` is called on a background thread — UI crashes
+
+The `configure()` and `fetchIntelligence()` completions are called on an internal background thread. Wrap any UI update in `DispatchQueue.main.async`:
+
+```swift
+OTPlessIntelligence.shared.fetchIntelligence { result in
+    DispatchQueue.main.async {
+        // Safe to update UI here
+        self.updateUI(result)
+    }
+}
+```
 
 ---
 
 ## Changelog
 
 ### 1.1.0
-- `configure()` now only requires `appID` — credentials are fetched automatically
-- Upgraded to IdentityFraud framework v1.1.2 (Swift 6.2, Xcode 26 SDK)
-- Added `ruleAction` to `OTPlessIntelligenceResponse` — server-side rule decisions
-- Intelligence push migrated to `platform.otpless.app/sdk/v1/device-fingerprint`
+- `configure()` now only requires `appID` — credentials fetched automatically from `platform.otpless.app`
+- Upgraded to IdentityFraud framework v1.1.2 (Swift 6.2, Xcode 26 SDK, min iOS 13)
+- Added `ruleAction: OTPlessRuleAction?` to `OTPlessIntelligenceResponse`
+- Intelligence data push migrated to `platform.otpless.app/sdk/v1/device-fingerprint`
 - `gaId` (vendor identifier / IDFV) and `platform: IOS` added to all push payloads
 - SSL pinning enabled on IdentityFraud SDK initialisation
+- Detailed `[OTPless]` console logging added throughout the initialisation flow
 
 ### 1.0.5
 - Initial public release

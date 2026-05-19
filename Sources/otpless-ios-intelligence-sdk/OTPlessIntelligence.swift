@@ -1,5 +1,5 @@
 import Foundation
-import IdentityFraud
+@_implementationOnly import IdentityFraud
 
 // MARK: - OTPlessSessionContext
 
@@ -48,67 +48,23 @@ public enum OTPlessIntelligenceError: Error {
     case unknown
 }
 
-// MARK: - GPSLocation log helper
+// MARK: - IdentityFraud type log helpers (internal use)
 
 extension GPSLocation {
-    @objc public var logDescription: String {
+    @objc var logDescription: String {
         "GPSLocation(lat=\(latitude ?? -1), lon=\(longitude ?? -1), alt=\(altitude ?? -1))"
     }
 }
 
-// MARK: - IPDetails log helper
-
 extension IPDetails {
-    @objc public var logDescription: String {
-        """
-        IPDetails(
-          ipCity=\(city ?? "nil"),
-          ipRegion=\(region ?? "nil"),
-          ipCountry=\(country ?? "nil"),
-          isp=\(isp ?? "nil"),
-          asn=\(asn ?? "nil"),
-          lat=\(latitude ?? -1),
-          lon=\(longitude ?? -1),
-          fraudScore=\(fraudScore ?? -1)
-        )
-        """
+    @objc var logDescription: String {
+        "IPDetails(city=\(city ?? "nil"), region=\(region ?? "nil"), country=\(country ?? "nil"), isp=\(isp ?? "nil"), fraudScore=\(fraudScore ?? -1))"
     }
 }
-
-// MARK: - DeviceMeta log helper
 
 extension DeviceMeta {
-    @objc public var logDescription: String {
-        """
-        DeviceMeta(
-          brand=\(brand ?? "nil"),
-          model=\(model ?? "nil"),
-          product=\(product ?? "nil"),
-          cpuType=\(cpuType ?? "nil"),
-          iOSVersion=\(iOSVersion ?? "nil"),
-          screenResolution=\(screenResolution ?? "nil"),
-          totalRAM=\(totalRAM ?? "nil"),
-          storageAvailable=\(storageAvailable ?? "nil"),
-          storageTotal=\(storageTotal ?? "nil")
-        )
-        """
-    }
-}
-
-// MARK: - AppAnalytics log helper
-
-extension AppAnalytics {
-    @objc public var logDescription: String {
-        let topAffinities: String
-        if let affinity, !affinity.isEmpty {
-            let sorted = affinity.sorted { $0.value > $1.value }.prefix(5)
-            topAffinities = sorted
-                .map { "\($0.key)=\($0.value)" }
-                .joined(separator: ", ")
-        } else {
-            topAffinities = "none"
-        }
-        return "AppAnalytics(affinity=[\(topAffinities)])"
+    @objc var logDescription: String {
+        "DeviceMeta(brand=\(brand ?? "nil"), model=\(model ?? "nil"), cpuType=\(cpuType ?? "nil"), iOSVersion=\(iOSVersion ?? "nil"))"
     }
 }
 
@@ -117,7 +73,7 @@ extension AppAnalytics {
 /// Server-side rule decision returned alongside the intelligence response.
 /// Tells the app what action to take (e.g. block, challenge) and why.
 @objcMembers
-public class OTPlessRuleAction: NSObject, Codable {
+class OTPlessRuleAction: NSObject, Codable {
     public let action: String?
     public let name: String?
     public let ruleDescription: String?
@@ -165,7 +121,7 @@ public class OTPlessRuleAction: NSObject, Codable {
 // MARK: - OTPlessIntelligenceResponse
 
 @objcMembers
-public class OTPlessIntelligenceResponse: NSObject, Codable {
+class OTPlessIntelligenceResponse: NSObject, Codable {
 
     public let requestId: String
     public let deviceId: String
@@ -317,22 +273,13 @@ public class OTPlessIntelligenceResponse: NSObject, Codable {
     }
 }
 
-// MARK: - OTPlessIntelligenceResult
-
-public struct OTPlessIntelligenceResult {
-    public let response: OTPlessIntelligenceResponse
-
-    public init(response: OTPlessIntelligenceResponse) {
-        self.response = response
-    }
-}
 
 // MARK: - OTPlessIntelligence (Public Facade)
 
 @objc public final class OTPlessIntelligence: NSObject, @unchecked Sendable {
 
     @objc public static let shared = OTPlessIntelligence()
-    var merchantAppId = ""
+    private(set) var merchantAppId = ""
     override init() {}
 
     // MARK: - Configure
@@ -378,20 +325,23 @@ public struct OTPlessIntelligenceResult {
 
     @available(iOS 15.0, *)
     public func fetchIntelligence(
-        completion: @escaping (Result<OTPlessIntelligenceResult, OTPlessIntelligenceError>) -> Void
+        completion: @escaping (Result<[String: Any], OTPlessIntelligenceError>) -> Void
     ) {
         guard DeviceIntelligenceManager.shared.sdkInitialized else {
-            completion(.failure(.intelligenceError(
-                requestId: SessionMgr.shared.getTsid(),
-                message: "OTPless Intelligence SDK is not configured"
-            )))
+            completion(.failure(.notConfigured))
             return
         }
 
-        DeviceIntelligenceManager.shared.getScore { response, error in
-            if let response {
-                let dto = Self.mapToDTO(response)
-                completion(.success(OTPlessIntelligenceResult(response: dto)))
+        DeviceIntelligenceManager.shared.getScore { response, error, apiResponse in
+            if let _ = response {
+                guard let apiResponse else {
+                    completion(.failure(.intelligenceError(
+                        requestId: SessionMgr.shared.getTsid(),
+                        message: "Failed to push intelligence data to server"
+                    )))
+                    return
+                }
+                completion(.success(apiResponse.rawResponse))
             } else if let error {
                 completion(.failure(.intelligenceError(
                     requestId: error.requestId,

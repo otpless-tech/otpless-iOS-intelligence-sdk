@@ -1,5 +1,5 @@
 import Foundation
-import IdentityFraud
+@_implementationOnly import IdentityFraud
 import UIKit
 
 internal final class DeviceIntelligenceManager: @unchecked Sendable {
@@ -23,7 +23,7 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
         return GetConfig()
     }()
 
-    var dfrID = ""
+    private var dfrID = ""
 
     // MARK: - Initialize
     // Fetches intelligenceClientId + secret from the platform config API,
@@ -69,7 +69,7 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
         }
     }
 
-    func requestStateForDeviceIfNil(onFetch: @escaping @Sendable (String?) -> Void) {
+    private func requestStateForDeviceIfNil(onFetch: @escaping @Sendable (String?) -> Void) {
         if let savedState = SecureStorage.shared.retrieve(key: Constants.STATE_KEY),
            !savedState.isEmpty {
             onFetch(savedState)
@@ -104,9 +104,9 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
 
     // MARK: - Get Score
     internal func getScore(
-        completion: @escaping (_ response: IntelligenceResponse?, _ error: IntelligenceError?) -> Void
+        completion: @escaping (_ response: IntelligenceResponse?, _ error: IntelligenceError?, _ apiResponse: IntelligenceApiResponse?) -> Void
     ) {
-        DeviceIntelligenceManager.shared.dfrID = ""
+        self.dfrID = ""
         let state = SessionMgr.shared.getState() ?? ""
 
         if state.isEmpty {
@@ -117,14 +117,16 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
         }
 
         guard #available(iOS 15.0, *) else {
+            OTPlessLogger.log("fetchIntelligence requires iOS 15.0 or later", level: .error)
             let error = IntelligenceError(
                 requestId: SessionMgr.shared.getTsid(),
                 errorMessage: "Unsupported iOS version"
             )
-            completion(nil, error)
+            completion(nil, error, nil)
             return
         }
 
+        OTPlessLogger.log("Fetching device intelligence — tsId: \(SessionMgr.shared.getTsid())")
         let listener = ScoreListener(completion: completion)
         IdentitySDK.getInstance().getIntelligence(listener: listener)
     }
@@ -157,8 +159,8 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
             requestData["asId"] = asid
         }
 
-        if !DeviceIntelligenceManager.shared.dfrID.isEmpty {
-            requestData["dfrId"] = DeviceIntelligenceManager.shared.dfrID
+        if !self.dfrID.isEmpty {
+            requestData["dfrId"] = self.dfrID
         }
 
         if let token = authMap["token"], !token.isEmpty {
@@ -170,16 +172,19 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
 
     // MARK: - Push to Backend
 
-    func pushIntelligenceDataToServerWithIntelligenceError(error: IntelligenceError) {
+    fileprivate func pushIntelligenceDataToServerWithIntelligenceError(error: IntelligenceError) {
         var requestMap = getRequestMap(authMap: [:])
         requestMap["data"] = ["requestId": error.requestId, "errorMessage": error.errorMessage]
         postIntelligencData(data: requestMap)
     }
 
-    func pushIntelligenceDataToServerWithIntelligenceData(response: IntelligenceResponse) {
+    /// Awaitable push — waits for the backend response and returns it.
+    /// Used by ScoreListener so fetchIntelligence() always carries the backend result.
+    fileprivate func pushIntelligenceDataAndAwait(response: IntelligenceResponse) async -> IntelligenceApiResponse? {
+        OTPlessLogger.log("Pushing intelligence data — requestId: \(response.requestId ?? "nil")")
         var requestMap = getRequestMap(authMap: [:])
         requestMap["data"] = buildRawJSON(from: response)
-        postIntelligencData(data: requestMap)
+        return await sendIntelligenceDataWithRetry(data: requestMap)
     }
 
     private func buildRawJSON(from response: IntelligenceResponse) -> [String: Any] {
@@ -198,7 +203,7 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
         let data: [String: Any]
     }
 
-    internal func postIntelligencData(data: [String: Any]) {
+    private func postIntelligencData(data: [String: Any]) {
         currentIntelligenceTask?.cancel()
         let payload = IntelligencePayload(data: data)
         currentIntelligenceTask = Task { [weak self, payload] in
@@ -206,35 +211,52 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
         }
     }
 
+    // Retry schedule: attempt 1 → wait 3s → attempt 2 → wait 6s → attempt 3 → error
+    // Failure condition: API error OR dfrId missing/empty in success response
+    @discardableResult
     private func sendIntelligenceDataWithRetry(
-        data: [String: Any],
-        maxAttempts: Int = 5,
-        initialDelayMs: UInt64 = 100
-    ) async {
-        var attempt = 1
-        var delayMs = initialDelayMs
+        data: [String: Any]
+    ) async -> IntelligenceApiResponse? {
+        let retryDelaysMs: [UInt64] = [3_000, 6_000]
+        let maxAttempts = 3
 
-        while !Task.isCancelled && attempt <= maxAttempts {
+        for attempt in 1...maxAttempts {
+            guard !Task.isCancelled else { return nil }
+
+            OTPlessLogger.log("Intelligence push attempt \(attempt)/\(maxAttempts)")
             let response = await intelligenceDataUseCase.invoke(bodyParams: data)
 
             switch response {
             case .success(let resp):
-                if let dfrID = resp?.dfrId {
-                    DeviceIntelligenceManager.shared.dfrID = dfrID
+                if let dfrId = resp?.dfrId, !dfrId.isEmpty {
+                    // Success — dfrId present
+                    OTPlessLogger.log("Intelligence push succeeded — dfrId: \(dfrId), responseKeys: \(Array(resp?.rawResponse.keys ?? [:].keys))")
+                    self.dfrID = dfrId
+                    return resp
+                } else {
+                    // API returned 2xx but dfrId is missing — treat as failure
+                    OTPlessLogger.log("Intelligence push returned success but dfrId is missing (attempt \(attempt)/\(maxAttempts))", level: .error)
                 }
-                return
 
-            case .error:
-                if attempt == maxAttempts { return }
+            case .error(let error):
+                OTPlessLogger.log("Intelligence push failed (attempt \(attempt)/\(maxAttempts)) — \(error.message)", level: .error)
+            }
+
+            // Schedule retry or give up
+            if attempt < maxAttempts {
+                let delayMs = retryDelaysMs[attempt - 1]
+                OTPlessLogger.log("Retrying intelligence push in \(delayMs / 1_000)s…")
                 do {
                     try await Task.sleep(nanoseconds: delayMs * 1_000_000)
                 } catch {
-                    return
+                    return nil
                 }
-                delayMs *= 2
-                attempt += 1
+            } else {
+                OTPlessLogger.log("Intelligence push exhausted all \(maxAttempts) attempts", level: .error)
             }
         }
+
+        return nil
     }
 
     internal func updateAuthMap(authMap: [String: String]) {
@@ -249,19 +271,24 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
 
 internal final class ScoreListener: NSObject, IntelligenceResponseListener {
 
-    private let completion: (IntelligenceResponse?, IntelligenceError?) -> Void
+    private let completion: (IntelligenceResponse?, IntelligenceError?, IntelligenceApiResponse?) -> Void
 
-    init(completion: @escaping (IntelligenceResponse?, IntelligenceError?) -> Void) {
+    init(completion: @escaping (IntelligenceResponse?, IntelligenceError?, IntelligenceApiResponse?) -> Void) {
         self.completion = completion
     }
 
     func onSuccess(response: IntelligenceResponse) {
-        DeviceIntelligenceManager.shared.pushIntelligenceDataToServerWithIntelligenceData(response: response)
-        completion(response, nil)
+        OTPlessLogger.log("IdentityFraud response received — requestId: \(response.requestId ?? "nil")")
+        Task {
+            let apiResponse = await DeviceIntelligenceManager.shared
+                .pushIntelligenceDataAndAwait(response: response)
+            completion(response, nil, apiResponse)
+        }
     }
 
     func onError(error: IntelligenceError) {
+        OTPlessLogger.log("IdentityFraud error — requestId: \(error.requestId), message: \(error.errorMessage)", level: .error)
         DeviceIntelligenceManager.shared.pushIntelligenceDataToServerWithIntelligenceError(error: error)
-        completion(nil, error)
+        completion(nil, error, nil)
     }
 }

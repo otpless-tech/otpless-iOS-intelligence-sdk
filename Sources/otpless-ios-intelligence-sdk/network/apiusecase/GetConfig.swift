@@ -11,7 +11,7 @@ class GetConfig {
 
         switch result {
         case .success(let config):
-            OTPlessLogger.log("Config fetch succeeded — clientId: \(config.intelligenceClientId)")
+            OTPlessLogger.log("Config fetch succeeded")
             return config
         case .failure(let error):
             OTPlessLogger.log("Config fetch failed — \(error.localizedDescription)", level: .error)

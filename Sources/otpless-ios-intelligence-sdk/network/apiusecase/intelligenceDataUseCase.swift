@@ -11,8 +11,10 @@
 
 
 import Foundation
-struct IntelligenceApiResponse: Codable {
-    let dfrId : String?
+
+struct IntelligenceApiResponse {
+    let dfrId: String?
+    let rawResponse: [String: Any]
 }
 
 class IntelligenceDataUseCase {

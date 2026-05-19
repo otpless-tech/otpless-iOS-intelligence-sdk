@@ -61,6 +61,7 @@ internal final class ApiRepository: @unchecked Sendable {
     /// appId is read from OTPlessIntelligence.shared (always available at call time).
     func pushIntelligenceData(bodyParams: [String: Any]) async -> Result<IntelligenceApiResponse, Error> {
         let appId = OTPlessIntelligence.shared.merchantAppId
+        OTPlessLogger.log("POST \(ApiManager.PLATFORM_BASE_URL)\(ApiManager.PUSH_INTELLIGENCE_PATH)  [appId: \(appId)]")
         do {
             let data = try await apiManager.performPlatformRequest(
                 appId: appId,
@@ -68,8 +69,14 @@ internal final class ApiRepository: @unchecked Sendable {
                 method: "POST",
                 body: bodyParams
             )
-            return try .success(JSONDecoder().decode(IntelligenceApiResponse.self, from: data))
+            let rawResponse = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+            let dfrId = rawResponse["dfrId"] as? String
+            return .success(IntelligenceApiResponse(dfrId: dfrId, rawResponse: rawResponse))
+        } catch let apiError as ApiError {
+            OTPlessLogger.log("Intelligence push API error — status: \(apiError.statusCode), message: \(apiError.message)", level: .error)
+            return .failure(apiError)
         } catch {
+            OTPlessLogger.log("Intelligence push request error — \(error.localizedDescription)", level: .error)
             return .failure(error)
         }
     }

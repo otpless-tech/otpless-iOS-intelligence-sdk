@@ -12,7 +12,7 @@
 
 import Foundation
 
-struct IntelligenceApiResponse {
+struct IntelligenceApiResponse: @unchecked Sendable {
     let dfrId: String?
     let rawResponse: [String: Any]
 }

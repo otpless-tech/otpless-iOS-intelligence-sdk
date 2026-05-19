@@ -295,7 +295,7 @@ class OTPlessIntelligenceResponse: NSObject, Codable {
     public func configure(
         appID: String,
         sessionContext: OTPlessSessionContext? = nil,
-        completion: @escaping (Bool) -> Void
+        completion: @escaping @Sendable (Bool) -> Void
     ) {
         guard !appID.isEmpty else {
             completion(false)
@@ -325,7 +325,7 @@ class OTPlessIntelligenceResponse: NSObject, Codable {
 
     @available(iOS 15.0, *)
     public func fetchIntelligence(
-        completion: @escaping (Result<[String: Any], OTPlessIntelligenceError>) -> Void
+        completion: @escaping @Sendable (Result<[String: Any], OTPlessIntelligenceError>) -> Void
     ) {
         guard DeviceIntelligenceManager.shared.sdkInitialized else {
             completion(.failure(.notConfigured))

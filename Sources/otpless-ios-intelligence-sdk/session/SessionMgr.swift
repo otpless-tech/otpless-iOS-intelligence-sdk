@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import UIKit
 
 internal final class SessionMgr: @unchecked Sendable {
     static let shared = SessionMgr()
@@ -12,10 +13,17 @@ internal final class SessionMgr: @unchecked Sendable {
     private var token: String = ""
     private var asid: String = ""
 
+    // Cached on initialize() which is always called from the main thread (app launch).
+    // Avoids accessing UIDevice.current (main-actor isolated) from background threads.
+    private(set) var vendorId: String = ""
+
     // MARK: - Initialize
     // Values in `context` take priority over auto-generated or persisted values.
     // Any ID absent from the context is filled in automatically.
     func initialize(from context: OTPlessSessionContext? = nil) {
+        // Cache IDFV here — configure() is always called from the main thread.
+        vendorId = UIDevice.current.identifierForVendor?.uuidString ?? ""
+
         // Apply external overrides first so generateTrackingId() skips filled fields.
         if let v = context?.inId, !v.isEmpty {
             self.inid = v

@@ -13,7 +13,7 @@ Pod::Spec.new do |s|
   s.social_media_url = 'https://twitter.com/otpless'
   # Where the pod can be fetched from
   s.source           = {
-    :git => 'https://github.com/otpless-tech/otpless-ios-intelligence-sdk',
+    :git => 'https://github.com/otpless-tech/otpless-ios-intelligence-sdk.git',
     :tag => s.version.to_s
   }
 
@@ -27,11 +27,9 @@ Pod::Spec.new do |s|
   # The xcframework used in the SPM binary target
   s.vendored_frameworks   = 'Frameworks/IdentityFraud.xcframework'
 
-  # If IdentityFraud needs system frameworks, add them here
-  # s.frameworks = 'UIKit', 'Foundation', 'Security', 'SystemConfiguration'
-
-  # If you ever add resources, use:
-  # s.resource_bundles = {
-  #   'OTPlessIntelligenceResources' => ['Sources/otpless-ios-intelligence-sdk/Resources/**/*']
-  # }
+  # Use targeted concurrency checking — allows the SDK to compile cleanly
+  # under both Swift 5 and Swift 6 without full strict-concurrency migration.
+  s.pod_target_xcconfig = {
+    'SWIFT_STRICT_CONCURRENCY' => 'targeted'
+  }
 end

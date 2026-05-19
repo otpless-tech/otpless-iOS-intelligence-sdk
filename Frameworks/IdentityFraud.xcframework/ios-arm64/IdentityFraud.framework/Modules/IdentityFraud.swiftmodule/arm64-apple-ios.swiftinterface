@@ -1,7 +1,7 @@
 // swift-interface-format-version: 1.0
-// swift-compiler-version: Apple Swift version 6.0.2 effective-5.10 (swiftlang-6.0.2.1.2 clang-1600.0.26.4)
-// swift-module-flags: -target arm64-apple-ios13.0 -enable-objc-interop -enable-library-evolution -swift-version 5 -enforce-exclusivity=checked -O -enable-bare-slash-regex -module-name IdentityFraud
-// swift-module-flags-ignorable: -no-verify-emitted-module-interface
+// swift-compiler-version: Apple Swift version 6.2.3 effective-5.10 (swiftlang-6.2.3.3.21 clang-1700.6.3.2)
+// swift-module-flags: -target arm64-apple-ios13.0 -enable-objc-interop -enable-library-evolution -swift-version 5 -enforce-exclusivity=checked -O -enable-experimental-feature DebugDescriptionMacro -enable-bare-slash-regex -module-name IdentityFraud
+// swift-module-flags-ignorable: -no-verify-emitted-module-interface -formal-cxx-interoperability-mode=off -interface-compiler-version 6.2.3
 import AVFoundation
 import AdSupport
 import AppTrackingTransparency
@@ -30,24 +30,6 @@ import _SwiftConcurrencyShims
 import os
 import MachO.dyld.utils
 import zlib
-@_inheritsConvenienceInitializers @objc final public class IdentitySDK : ObjectiveC.NSObject {
-  @available(iOS 15.0, *)
-  @objc public static func getInstance() -> IdentityFraud.IdentitySDK
-  @available(iOS 15.0, *)
-  @objc final public func initAsync(options: IdentityFraud.Options, completion: @escaping (Swift.Bool) -> Swift.Void)
-  @available(iOS 15.0, *)
-  @objc final public func updateOptions(updateOption: IdentityFraud.UpdateOption)
-  @available(iOS 15.0, *)
-  @objc final public func getIntelligence(listener: any IdentityFraud.IntelligenceResponseListener)
-  @available(iOS 15.0, *)
-  @objc final public func getSessionId() -> Swift.String
-  @available(iOS 15.0, *)
-  @objc final public func protectScreenCapture(_ viewController: UIKit.UIViewController)
-  @available(iOS 15.0, *)
-  @objc final public func stopScreenCaptureProtection(_ viewController: UIKit.UIViewController)
-  @objc override dynamic public init()
-  @objc deinit
-}
 @objc public class IntelligenceError : ObjectiveC.NSObject, Swift.Codable {
   @objc final public let requestId: Swift.String
   @objc final public let errorMessage: Swift.String
@@ -79,7 +61,9 @@ import zlib
   public var description: Swift.String {
     get
   }
+  #if compiler(>=5.3) && $NonescapableTypes
   public init?(rawValue: Swift.Int)
+  #endif
   public typealias RawValue = Swift.Int
   public var rawValue: Swift.Int {
     get
@@ -91,7 +75,9 @@ import zlib
   case TRANSACTION
   case OTHERS
   public func description() -> Swift.String
+  #if compiler(>=5.3) && $NonescapableTypes
   public init?(rawValue: Swift.Int)
+  #endif
   public typealias RawValue = Swift.Int
   public var rawValue: Swift.Int {
     get
@@ -121,12 +107,18 @@ import zlib
 @_hasMissingDesignatedInitializers @objc public class UpdateOption : ObjectiveC.NSObject {
   @_inheritsConvenienceInitializers @objc public class UpdateOptionBuilder : ObjectiveC.NSObject {
     @objc override dynamic public init()
+    #if compiler(>=5.3) && $NonescapableTypes
     @objc public func setPhoneNumber(_ phoneNumber: Swift.String?) -> IdentityFraud.UpdateOption.UpdateOptionBuilder
+    #endif
     @objc public func setPhoneInputType(_ phoneInputType: IdentityFraud.PhoneInputType) -> IdentityFraud.UpdateOption.UpdateOptionBuilder
     @objc public func setOtpInputType(_ otpInputType: IdentityFraud.OtpInputType) -> IdentityFraud.UpdateOption.UpdateOptionBuilder
+    #if compiler(>=5.3) && $NonescapableTypes
     @objc public func setUserId(_ userId: Swift.String?) -> IdentityFraud.UpdateOption.UpdateOptionBuilder
+    #endif
     @objc public func setUserEventType(_ userEventType: IdentityFraud.UserEventType) -> IdentityFraud.UpdateOption.UpdateOptionBuilder
+    #if compiler(>=5.3) && $NonescapableTypes
     @objc public func setMerchantId(_ merchantId: Swift.String?) -> IdentityFraud.UpdateOption.UpdateOptionBuilder
+    #endif
     @objc public func setAdditionalAttributes(_ additionalAttributes: [Swift.String : Swift.String]) -> IdentityFraud.UpdateOption.UpdateOptionBuilder
     @objc public func build() -> IdentityFraud.UpdateOption
     @objc deinit
@@ -138,14 +130,23 @@ import zlib
     @objc override dynamic public init()
     @objc public func setClientId(_ clientId: Swift.String) -> IdentityFraud.Options.OptionBuilder
     @objc public func setClientSecret(_ clientSecret: Swift.String) -> IdentityFraud.Options.OptionBuilder
+    #if compiler(>=5.3) && $NonescapableTypes
     @objc public func setBaseUrl(_ url: Swift.String?) -> IdentityFraud.Options.OptionBuilder
+    #endif
+    @objc public func setSSLPinning(_ sslPinning: Swift.Bool) -> IdentityFraud.Options.OptionBuilder
     @objc public func setEnvironment(_ environment: IdentityFraud.Environment) -> IdentityFraud.Options.OptionBuilder
+    #if compiler(>=5.3) && $NonescapableTypes
     @objc public func setPhoneNumber(_ phoneNumber: Swift.String?) -> IdentityFraud.Options.OptionBuilder
+    #endif
     @objc public func setPhoneInputType(_ phoneInputType: IdentityFraud.PhoneInputType) -> IdentityFraud.Options.OptionBuilder
     @objc public func setOtpInputType(_ otpInputType: IdentityFraud.OtpInputType) -> IdentityFraud.Options.OptionBuilder
+    #if compiler(>=5.3) && $NonescapableTypes
     @objc public func setUserId(_ userId: Swift.String?) -> IdentityFraud.Options.OptionBuilder
+    #endif
     @objc public func setUserEventType(_ userEventType: IdentityFraud.UserEventType) -> IdentityFraud.Options.OptionBuilder
+    #if compiler(>=5.3) && $NonescapableTypes
     @objc public func setMerchantId(_ merchantId: Swift.String?) -> IdentityFraud.Options.OptionBuilder
+    #endif
     @objc public func setAdditionalAttributes(_ additionalAttributes: [Swift.String : Swift.String]) -> IdentityFraud.Options.OptionBuilder
     @objc public func build() -> IdentityFraud.Options
     @objc deinit
@@ -158,18 +159,32 @@ import zlib
   case COPY_PASTED
   case AUTO_FILLED
   public func description() -> Swift.String
+  #if compiler(>=5.3) && $NonescapableTypes
   public init?(rawValue: Swift.Int)
+  #endif
   public typealias RawValue = Swift.Int
   public var rawValue: Swift.Int {
     get
   }
+}
+@_inheritsConvenienceInitializers @objc public class RuleAction : ObjectiveC.NSObject, Swift.Codable {
+  @objc public var action: Swift.String?
+  @objc public var name: Swift.String?
+  @objc public var ruleDescription: Swift.String?
+  @objc public var message: Swift.String?
+  @objc override dynamic public init()
+  required public init(from decoder: any Swift.Decoder) throws
+  public func encode(to encoder: any Swift.Encoder) throws
+  @objc deinit
 }
 @objc public enum PhoneInputType : Swift.Int {
   case MANUAL
   case COPY_PASTE
   case GOOGLE_HINT
   public func description() -> Swift.String
+  #if compiler(>=5.3) && $NonescapableTypes
   public init?(rawValue: Swift.Int)
+  #endif
   public typealias RawValue = Swift.Int
   public var rawValue: Swift.Int {
     get
@@ -200,10 +215,33 @@ import zlib
   @objc public var factoryResetTime: Foundation.NSNumber?
   @objc public var deviceMeta: IdentityFraud.DeviceMeta?
   @objc public var appAnalytics: IdentityFraud.AppAnalytics?
-  @objc public init(sessionId: Swift.String?, deviceId: Swift.String?, requestId: Swift.String?, simulator: Swift.Bool, jailbroken: Swift.Bool, vpn: Swift.Bool, geoSpoofed: Swift.Bool, appTampering: Swift.Bool, hooking: Swift.Bool, proxy: Swift.Bool, mirroredScreen: Swift.Bool, gpsLocation: IdentityFraud.GPSLocation?, cloned: Swift.Bool, clientUserIds: [Swift.String]?, newDevice: Swift.Bool, ip: Swift.String?, ipDetails: IdentityFraud.IPDetails?, factoryReset: Swift.Bool, deviceRiskScore: Swift.Float, sessionRiskScore: Swift.Float, factoryResetTime: Swift.Int64, deviceMeta: IdentityFraud.DeviceMeta?, appAnalytics: IdentityFraud.AppAnalytics?)
+  @objc public var ruleAction: IdentityFraud.RuleAction?
+  #if compiler(>=5.3) && $NonescapableTypes
+  @objc public init(sessionId: Swift.String?, deviceId: Swift.String?, requestId: Swift.String?, simulator: Swift.Bool, jailbroken: Swift.Bool, vpn: Swift.Bool, geoSpoofed: Swift.Bool, appTampering: Swift.Bool, hooking: Swift.Bool, proxy: Swift.Bool, mirroredScreen: Swift.Bool, gpsLocation: IdentityFraud.GPSLocation?, cloned: Swift.Bool, clientUserIds: [Swift.String]?, newDevice: Swift.Bool, ip: Swift.String?, ipDetails: IdentityFraud.IPDetails?, factoryReset: Swift.Bool, deviceRiskScore: Swift.Float, sessionRiskScore: Swift.Float, factoryResetTime: Swift.Int64, deviceMeta: IdentityFraud.DeviceMeta?, appAnalytics: IdentityFraud.AppAnalytics?, ruleAction: IdentityFraud.RuleAction?)
+  #endif
+  #if compiler(>=5.3) && $NonescapableTypes
   convenience public init(sessionId: Swift.String? = nil, deviceId: Swift.String? = nil, requestId: Swift.String? = nil)
+  #endif
   required public init(from decoder: any Swift.Decoder) throws
   public func encode(to encoder: any Swift.Encoder) throws
+  @objc deinit
+}
+@_inheritsConvenienceInitializers @objc final public class IdentitySDK : ObjectiveC.NSObject {
+  @available(iOS 15.0, *)
+  @objc public static func getInstance() -> IdentityFraud.IdentitySDK
+  @available(iOS 15.0, *)
+  @objc final public func initAsync(options: IdentityFraud.Options, completion: @escaping (Swift.Bool) -> Swift.Void)
+  @available(iOS 15.0, *)
+  @objc final public func updateOptions(updateOption: IdentityFraud.UpdateOption)
+  @available(iOS 15.0, *)
+  @objc final public func getIntelligence(listener: any IdentityFraud.IntelligenceResponseListener)
+  @available(iOS 15.0, *)
+  @objc final public func getSessionId() -> Swift.String
+  @available(iOS 15.0, *)
+  @objc final public func protectScreenCapture(_ viewController: UIKit.UIViewController)
+  @available(iOS 15.0, *)
+  @objc final public func stopScreenCaptureProtection(_ viewController: UIKit.UIViewController)
+  @objc override dynamic public init()
   @objc deinit
 }
 @_inheritsConvenienceInitializers @objc public class IPDetails : ObjectiveC.NSObject, Swift.Codable {

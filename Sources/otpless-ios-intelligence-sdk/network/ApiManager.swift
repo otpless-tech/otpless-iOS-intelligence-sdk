@@ -1,21 +1,90 @@
-
 import Foundation
 
 final class ApiManager: Sendable {
     private let userAuthTimeout: TimeInterval
+
+    // MARK: - Base URLs
     private let baseURLUserAuth = "https://user-auth.otpless.app"
-    // MARK: Paths for APIs
+    static let PLATFORM_BASE_URL = "https://platform.otpless.app"
+
+    // MARK: - Paths
     static let GET_STATE_PATH = "/v2/state"
-    static let INTELLIGENCE_DATA_PUSH_PATH = "/v3/device/device-fingerprint"
+    static let GET_CONFIG_PATH = "/sdk/v1/device-fingerprint/config"
+    static let PUSH_INTELLIGENCE_PATH = "/sdk/v1/device-fingerprint"
+
+    // Base URL used to initialise IdentityFraud SDK
     static let INTELLIGENCE_SERVER_PATH = "https://fingerprint.otpless.com/"
-    
-    init(
-        userAuthTimeout: TimeInterval = 20.0
-    ) {
+
+    init(userAuthTimeout: TimeInterval = 20.0) {
         self.userAuthTimeout = userAuthTimeout
     }
-    
-    // MARK: - User Auth API Request
+
+    // MARK: - Platform API Request (platform.otpless.app)
+    // Used for config fetch and intelligence data push.
+    // appId is sent as an HTTP header.
+    func performPlatformRequest(
+        appId: String,
+        path: String,
+        method: String,
+        body: [String: Any]? = nil,
+        queryParameters: [String: Any]? = nil
+    ) async throws -> Data {
+        var urlComponents = URLComponents(string: ApiManager.PLATFORM_BASE_URL + path)!
+
+        if method.uppercased() == "GET", let queryParameters = queryParameters {
+            urlComponents.queryItems = queryParameters.map {
+                URLQueryItem(name: $0.key, value: $0.value as? String ?? "")
+            }
+        }
+
+        guard let url = urlComponents.url else {
+            throw ApiError(message: "Invalid URL", statusCode: 0)
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = userAuthTimeout
+        request.setValue(appId, forHTTPHeaderField: "appId")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        if method.uppercased() == "POST", let body = body {
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+
+            guard let http = response as? HTTPURLResponse else {
+                throw URLError(.badServerResponse)
+            }
+
+            if !(200..<300).contains(http.statusCode) {
+                let errorBody = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+                throw ApiError(
+                    message: errorBody["message"] as? String ?? "Unexpected error occurred",
+                    statusCode: http.statusCode,
+                    responseJson: errorBody
+                )
+            }
+
+            return data
+        } catch {
+            let apiError: ApiError
+            if let e = error as? ApiError {
+                apiError = e
+            } else if let urlError = error as? URLError {
+                apiError = handleURLError(urlError)
+            } else {
+                apiError = ApiError(message: error.localizedDescription, statusCode: 500, responseJson: [
+                    "errorCode": "500", "errorMessage": "Something Went Wrong!"
+                ])
+            }
+            throw apiError
+        }
+    }
+
+    // MARK: - User Auth API Request (user-auth.otpless.app)
+    // Used for state fetch.
     func performUserAuthRequest(
         state: String?,
         path: String,
@@ -30,13 +99,11 @@ final class ApiManager: Sendable {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.timeoutInterval = userAuthTimeout
-        
-        if method.uppercased() == "POST" {
 
+        if method.uppercased() == "POST" {
             request.httpBody = try? JSONSerialization.data(withJSONObject: body!, options: [])
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
-
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -45,9 +112,7 @@ final class ApiManager: Sendable {
                 throw URLError(.badServerResponse)
             }
 
-
             if !(200..<300).contains(http.statusCode) {
-
                 let errorBody = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
                 throw ApiError(
                     message: errorBody["message"] as? String ?? "Unexpected error occurred",
@@ -58,12 +123,11 @@ final class ApiManager: Sendable {
 
             return data
         } catch {
-            // normalize
             let apiError: ApiError
             if let e = error as? ApiError {
                 apiError = e
             } else if let urlError = error as? URLError {
-                apiError = handleURLError(urlError)   // make sure this does NOT emit
+                apiError = handleURLError(urlError)
             } else {
                 apiError = ApiError(message: error.localizedDescription, statusCode: 500, responseJson: [
                     "errorCode": "500", "errorMessage": "Something Went Wrong!"
@@ -73,7 +137,6 @@ final class ApiManager: Sendable {
         }
     }
 
-    
     // MARK: - Helpers
     private func constructURL(
         baseURL: String,
@@ -82,11 +145,11 @@ final class ApiManager: Sendable {
         method: String
     ) -> URL {
         var urlComponents = URLComponents(string: baseURL + path)!
-        
+
         if method.uppercased() == "POST" {
             return urlComponents.url!
         }
-        
+
         let extraQueryParams = [
             URLQueryItem(name: "origin", value: "https://otpless.com"),
             URLQueryItem(name: "tsId", value: SessionMgr.shared.getTsid()),
@@ -97,58 +160,50 @@ final class ApiManager: Sendable {
             URLQueryItem(name: "isLoginPage", value: "false"),
             URLQueryItem(name: "appId", value: OTPlessIntelligence.shared.merchantAppId)
         ]
-        
-             
+
         if let queryParameters = queryParameters {
             urlComponents.queryItems = queryParameters.map { URLQueryItem(name: $0.key, value: ($0.value as? String ?? "")) }
         }
-        
+
         for queryItem in extraQueryParams {
             urlComponents.queryItems?.append(queryItem)
         }
-        
+
         return urlComponents.url!
     }
-    
+
     private func handleURLError(_ urlError: URLError) -> ApiError {
         let code = urlError.errorCode
         let errorBody = urlError.errorUserInfo
-        
+
         switch urlError.code {
         case .timedOut:
             return ApiError(message: "Request timeout", statusCode: 9100, responseJson: [
-                "errorCode": "9100",
-                "errorMessage": "Request timeout"
+                "errorCode": "9100", "errorMessage": "Request timeout"
             ])
         case .networkConnectionLost:
             return ApiError(message: "Network connection was lost", statusCode: 9101, responseJson: [
-                "errorCode": "9101",
-                "errorMessage": "Network connection was lost"
+                "errorCode": "9101", "errorMessage": "Network connection was lost"
             ])
         case .dnsLookupFailed:
             return ApiError(message: "DNS lookup failed", statusCode: 9102, responseJson: [
-                "errorCode": "9102",
-                "errorMessage": "DNS lookup failed"
+                "errorCode": "9102", "errorMessage": "DNS lookup failed"
             ])
         case .cannotConnectToHost:
             return ApiError(message: "Cannot connect to the server", statusCode: 9103, responseJson: [
-                "errorCode": "9103",
-                "errorMessage": "Cannot connect to the server"
+                "errorCode": "9103", "errorMessage": "Cannot connect to the server"
             ])
         case .notConnectedToInternet:
             return ApiError(message: "No internet connection", statusCode: 9104, responseJson: [
-                "errorCode": "9104",
-                "errorMessage": "No internet connection"
+                "errorCode": "9104", "errorMessage": "No internet connection"
             ])
         case .secureConnectionFailed:
             return ApiError(message: "Secure connection failed (SSL issue)", statusCode: 9105, responseJson: [
-                "errorCode": "9105",
-                "errorMessage": "Secure connection failed (SSL issue)"
+                "errorCode": "9105", "errorMessage": "Secure connection failed (SSL issue)"
             ])
         case .cancelled:
             return ApiError(message: "Otpless authentication request cancelled", statusCode: 9110, responseJson: [
-                "errorCode": "9110",
-                "errorMessage": "Otpless authentication request cancelled"
+                "errorCode": "9110", "errorMessage": "Otpless authentication request cancelled"
             ])
         default:
             let errorMessage = errorBody["message"] as? String ?? "Something Went Wrong!"
@@ -176,10 +231,9 @@ internal final class ApiError: Error, @unchecked Sendable {
     var description: String {
         return "message: \(message)\nstatusCode: \(statusCode)\(responseJson != nil ? "\n\(responseJson!)" : "")"
     }
-    
+
     func getResponse() -> [String: String] {
         let errorCode = responseJson?["errorCode"] as? String ?? String(statusCode)
-        
         return [
             "errorCode": errorCode,
             "errorMessage": responseJson?["description"] as? String ?? message

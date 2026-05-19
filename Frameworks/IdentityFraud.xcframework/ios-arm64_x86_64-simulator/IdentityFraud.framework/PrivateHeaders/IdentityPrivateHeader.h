@@ -1,6 +1,6 @@
 //
 //  SimulatorChecker.h
-//  IdentityFraud
+//  Sign3Intelligence
 //
 //  Created by Ashish Gupta on 10/09/24.
 //

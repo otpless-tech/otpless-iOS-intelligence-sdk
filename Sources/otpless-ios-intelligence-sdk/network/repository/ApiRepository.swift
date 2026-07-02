@@ -2,9 +2,9 @@ import Foundation
 
 internal final class ApiRepository: @unchecked Sendable {
     private let apiManager: ApiManager
-
-    init(userAuthApiTimeout: TimeInterval) {
-        self.apiManager = ApiManager(userAuthTimeout: userAuthApiTimeout)
+    static let shared = ApiRepository(apiTimeout: 10)
+    private init(apiTimeout: TimeInterval) {
+        self.apiManager = ApiManager(apiTimeout: apiTimeout)
     }
 
     // MARK: - Config
@@ -18,7 +18,6 @@ internal final class ApiRepository: @unchecked Sendable {
             "packageName": bundleId,
             "platform": "IOS"
         ]
-        OTPlessLogger.log("GET \(ApiManager.PLATFORM_BASE_URL)\(ApiManager.GET_CONFIG_PATH)?packageName=\(bundleId)&platform=IOS  [appId: \(appId)]")
         do {
             let data = try await apiManager.performPlatformRequest(
                 appId: appId,
@@ -39,29 +38,12 @@ internal final class ApiRepository: @unchecked Sendable {
         }
     }
 
-    // MARK: - State
-
-    func getState(queryParams: [String: String]) async -> Result<StateResponse, Error> {
-        do {
-            let data = try await self.apiManager.performUserAuthRequest(
-                state: nil,
-                path: ApiManager.GET_STATE_PATH,
-                method: "GET",
-                queryParameters: queryParams
-            )
-            return try .success(JSONDecoder().decode(StateResponse.self, from: data))
-        } catch {
-            return .failure(error)
-        }
-    }
-
     // MARK: - Intelligence Push
 
     /// Posts device intelligence data to the platform API.
     /// appId is read from OTPlessIntelligence.shared (always available at call time).
-    func pushIntelligenceData(bodyParams: [String: Any]) async -> Result<IntelligenceApiResponse, Error> {
+    func pushIntelligenceData(bodyParams: [String: Any]) async -> Result<IntelligencePushResult, Error> {
         let appId = OTPlessIntelligence.shared.merchantAppId
-        OTPlessLogger.log("POST \(ApiManager.PLATFORM_BASE_URL)\(ApiManager.PUSH_INTELLIGENCE_PATH)  [appId: \(appId)]")
         do {
             let data = try await apiManager.performPlatformRequest(
                 appId: appId,
@@ -71,7 +53,7 @@ internal final class ApiRepository: @unchecked Sendable {
             )
             let rawResponse = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
             let dfrId = rawResponse["dfrId"] as? String
-            return .success(IntelligenceApiResponse(dfrId: dfrId, rawResponse: rawResponse))
+            return .success(IntelligencePushResult(dfrId: dfrId, rawResponse: rawResponse))
         } catch let apiError as ApiError {
             OTPlessLogger.log("Intelligence push API error — status: \(apiError.statusCode), message: \(apiError.message)", level: .error)
             return .failure(apiError)

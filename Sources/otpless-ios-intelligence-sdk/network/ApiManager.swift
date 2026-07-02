@@ -1,22 +1,20 @@
 import Foundation
 
-final class ApiManager: Sendable {
-    private let userAuthTimeout: TimeInterval
+final internal class ApiManager: Sendable {
+    private let apiTimeout: TimeInterval
 
     // MARK: - Base URLs
-    private let baseURLUserAuth = "https://user-auth.otpless.app"
     static let PLATFORM_BASE_URL = "https://platform.otpless.app"
 
     // MARK: - Paths
-    static let GET_STATE_PATH = "/v2/state"
     static let GET_CONFIG_PATH = "/sdk/v1/device-fingerprint/config"
     static let PUSH_INTELLIGENCE_PATH = "/sdk/v1/device-fingerprint"
 
     // Base URL used to initialise IdentityFraud SDK
     static let INTELLIGENCE_SERVER_PATH = "https://fingerprint.otpless.com/"
 
-    init(userAuthTimeout: TimeInterval = 20.0) {
-        self.userAuthTimeout = userAuthTimeout
+    init(apiTimeout: TimeInterval = 20.0) {
+        self.apiTimeout = apiTimeout
     }
 
     // MARK: - Platform API Request (platform.otpless.app)
@@ -43,7 +41,7 @@ final class ApiManager: Sendable {
 
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.timeoutInterval = userAuthTimeout
+        request.timeoutInterval = apiTimeout
         request.setValue(appId, forHTTPHeaderField: "appId")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
@@ -51,12 +49,19 @@ final class ApiManager: Sendable {
             request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         }
 
+        let startMs = Self.currentTimeMs()
+        OTPlessLogger.verboseLog(Self.formatRequestLog(request: request, body: body))
+
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
+            let elapsedMs = Self.currentTimeMs() - startMs
 
             guard let http = response as? HTTPURLResponse else {
+                OTPlessLogger.verboseLog("<-- HTTP FAILED: Bad server response (\(elapsedMs)ms)", level: .error)
                 throw URLError(.badServerResponse)
             }
+
+            OTPlessLogger.verboseLog(Self.formatResponseLog(http: http, url: url, data: data, elapsedMs: elapsedMs))
 
             if !(200..<300).contains(http.statusCode) {
                 let errorBody = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
@@ -71,10 +76,15 @@ final class ApiManager: Sendable {
         } catch {
             let apiError: ApiError
             if let e = error as? ApiError {
+                // HTTP response already logged above; rethrow as-is.
                 apiError = e
             } else if let urlError = error as? URLError {
+                let elapsedMs = Self.currentTimeMs() - startMs
+                OTPlessLogger.verboseLog("<-- HTTP FAILED: \(urlError.code.rawValue) \(urlError.localizedDescription) (\(elapsedMs)ms)", level: .error)
                 apiError = handleURLError(urlError)
             } else {
+                let elapsedMs = Self.currentTimeMs() - startMs
+                OTPlessLogger.verboseLog("<-- HTTP FAILED: \(error.localizedDescription) (\(elapsedMs)ms)", level: .error)
                 apiError = ApiError(message: error.localizedDescription, statusCode: 500, responseJson: [
                     "errorCode": "500", "errorMessage": "Something Went Wrong!"
                 ])
@@ -83,94 +93,52 @@ final class ApiManager: Sendable {
         }
     }
 
-    // MARK: - User Auth API Request (user-auth.otpless.app)
-    // Used for state fetch.
-    func performUserAuthRequest(
-        state: String?,
-        path: String,
-        method: String,
-        body: [String: Any]? = nil,
-        queryParameters: [String: Any]? = nil
-    ) async throws -> Data {
-        var newPath = path
-        if let state = state { newPath = path.replacingOccurrences(of: "{state}", with: state) }
+    // MARK: - OkHttp-style request/response logging
+    // All formatters are invoked through OTPlessLogger.verboseLog(@autoclosure),
+    // so when OTPLESS_DEBUG is undefined they are never called and pay zero cost.
 
-        let url = constructURL(baseURL: baseURLUserAuth, path: newPath, queryParameters: queryParameters, method: method)
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.timeoutInterval = userAuthTimeout
-
-        if method.uppercased() == "POST" {
-            request.httpBody = try? JSONSerialization.data(withJSONObject: body!, options: [])
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    private static func formatRequestLog(request: URLRequest, body: [String: Any]?) -> String {
+        let method = request.httpMethod ?? "GET"
+        let urlString = request.url?.absoluteString ?? "<no-url>"
+        var lines: [String] = ["--> \(method) \(urlString)"]
+        if let fields = request.allHTTPHeaderFields {
+            for (key, value) in fields.sorted(by: { $0.key < $1.key }) {
+                lines.append("\(key): \(value)")
+            }
         }
-
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            guard let http = response as? HTTPURLResponse else {
-                throw URLError(.badServerResponse)
-            }
-
-            if !(200..<300).contains(http.statusCode) {
-                let errorBody = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
-                throw ApiError(
-                    message: errorBody["message"] as? String ?? "Unexpected error occurred",
-                    statusCode: http.statusCode,
-                    responseJson: errorBody
-                )
-            }
-
-            return data
-        } catch {
-            let apiError: ApiError
-            if let e = error as? ApiError {
-                apiError = e
-            } else if let urlError = error as? URLError {
-                apiError = handleURLError(urlError)
-            } else {
-                apiError = ApiError(message: error.localizedDescription, statusCode: 500, responseJson: [
-                    "errorCode": "500", "errorMessage": "Something Went Wrong!"
-                ])
-            }
-            throw apiError
+        if let body {
+            lines.append(Utils.convertDictionaryToString(body))
         }
+        let byteCount = request.httpBody?.count ?? 0
+        lines.append("--> END \(method) (\(byteCount)-byte body)")
+        return lines.joined(separator: "\n")
+    }
+
+    private static func formatResponseLog(http: HTTPURLResponse, url: URL, data: Data, elapsedMs: Int) -> String {
+        var lines: [String] = ["<-- \(http.statusCode) \(url.absoluteString) (\(elapsedMs)ms)"]
+        if let pretty = prettyJsonString(data) {
+            lines.append(pretty)
+        } else if let raw = String(data: data, encoding: .utf8), !raw.isEmpty {
+            lines.append(raw)
+        }
+        lines.append("<-- END HTTP")
+        return lines.joined(separator: "\n")
+    }
+
+    private static func prettyJsonString(_ data: Data) -> String? {
+        guard
+            let obj = try? JSONSerialization.jsonObject(with: data),
+            let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]),
+            let str = String(data: pretty, encoding: .utf8)
+        else { return nil }
+        return str
+    }
+
+    private static func currentTimeMs() -> Int {
+        Int(Date().timeIntervalSince1970 * 1000)
     }
 
     // MARK: - Helpers
-    private func constructURL(
-        baseURL: String,
-        path: String,
-        queryParameters: [String: Any]?,
-        method: String
-    ) -> URL {
-        var urlComponents = URLComponents(string: baseURL + path)!
-
-        if method.uppercased() == "POST" {
-            return urlComponents.url!
-        }
-
-        let extraQueryParams = [
-            URLQueryItem(name: "origin", value: "https://otpless.com"),
-            URLQueryItem(name: "tsId", value: SessionMgr.shared.getTsid()),
-            URLQueryItem(name: "inId", value: SessionMgr.shared.getInid()),
-            URLQueryItem(name: "version", value: "V4"),
-            URLQueryItem(name: "isHeadless", value: "true"),
-            URLQueryItem(name: "platform", value: "iOS"),
-            URLQueryItem(name: "isLoginPage", value: "false"),
-            URLQueryItem(name: "appId", value: OTPlessIntelligence.shared.merchantAppId)
-        ]
-
-        if let queryParameters = queryParameters {
-            urlComponents.queryItems = queryParameters.map { URLQueryItem(name: $0.key, value: ($0.value as? String ?? "")) }
-        }
-
-        for queryItem in extraQueryParams {
-            urlComponents.queryItems?.append(queryItem)
-        }
-
-        return urlComponents.url!
-    }
 
     private func handleURLError(_ urlError: URLError) -> ApiError {
         let code = urlError.errorCode

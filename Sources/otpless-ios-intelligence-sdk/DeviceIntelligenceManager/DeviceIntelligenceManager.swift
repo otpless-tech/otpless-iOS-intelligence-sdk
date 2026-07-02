@@ -1,4 +1,5 @@
 import Foundation
+import OtplessEventIO
 @_implementationOnly import IdentityFraud
 
 internal final class DeviceIntelligenceManager: @unchecked Sendable {
@@ -7,15 +8,10 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
     private init() {}
 
     internal private(set) var sdkInitialized: Bool = false
-    internal let apiRepository = ApiRepository(userAuthApiTimeout: 30.0)
     private var currentIntelligenceTask: Task<Void, Never>?
 
-    private lazy var intelligenceDataUseCase: IntelligenceDataUseCase = {
-        return IntelligenceDataUseCase()
-    }()
-
-    private lazy var getStateUseCase: GetState = {
-        return GetState()
+    private lazy var intelligenceDataUseCase: IntelligenceDataSyncUseCase = {
+        return IntelligenceDataSyncUseCase()
     }()
 
     private lazy var getConfigUseCase: GetConfig = {
@@ -29,72 +25,37 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
     // completion is @Sendable so it can be safely captured in the Task closure (Swift 6).
     internal func initialize(completion: @escaping @Sendable (Bool) -> Void) {
         guard #available(iOS 15.0, *) else {
-            OTPlessLogger.log("configure() requires iOS 15.0 or later", level: .error)
+            IntelligenceEvents.initFailed(reason: "ios_version_unsupported")
             completion(false)
             return
         }
-
-        OTPlessLogger.log("Initialising — appId: \(OTPlessIntelligence.shared.merchantAppId), bundle: \(Bundle.main.bundleIdentifier ?? "unknown")")
-
         Task { [weak self] in
             guard let config = await self?.getConfigUseCase.invoke() else {
-                OTPlessLogger.log("Initialisation failed: could not fetch config from platform API", level: .error)
-                OTPlessLogger.log("Check: (1) appId is correct, (2) iOS intelligence is enabled for this app in the OTPless dashboard, (3) network connectivity", level: .error)
+                IntelligenceEvents.initFailed(reason: "config_fetch_failed")
                 completion(false)
                 return
             }
 
-            OTPlessLogger.log("Initialising IdentityFraud SDK…")
             let builder = Options.OptionBuilder()
                 .setClientId(config.intelligenceClientId)
                 .setClientSecret(config.secret)
-                .setBaseUrl(ApiManager.INTELLIGENCE_SERVER_PATH)
-                .setSSLPinning(true)
-                .setEnvironment(.PROD)
 
             let options = builder.build()
 
+            let initStartMs = Self.currentTimeMs()
             IdentitySDK.getInstance().initAsync(options: options) { [weak self] initialized in
-                if initialized {
-                    OTPlessLogger.log("IdentityFraud SDK initialised successfully")
-                } else {
-                    OTPlessLogger.log("IdentityFraud SDK initialisation failed — check clientId/secret validity", level: .error)
+                let elapsedMs = Self.currentTimeMs() - initStartMs
+                IntelligenceEvents.initPlayIntelligence(
+                    result: initialized,
+                    responseTimeMs: elapsedMs
+                )
+                if !initialized {
+                    IntelligenceEvents.initFailed(reason: "identity_fraud_init_failed")
                 }
                 self?.sdkInitialized = initialized
                 completion(initialized)
             }
         }
-    }
-
-    private func requestStateForDeviceIfNil(onFetch: @escaping @Sendable (String?) -> Void) {
-        if let savedState = SecureStorage.shared.retrieve(key: Constants.STATE_KEY),
-           !savedState.isEmpty {
-            onFetch(savedState)
-        } else {
-            Task(priority: .medium) { [weak self] in
-                let stateResponse = await self?.getStateUseCase
-                    .invoke(queryParams: [:], isRetry: false)
-                let state = stateResponse?.0?.state
-                await MainActor.run {
-                    onFetch(state)
-                }
-            }
-        }
-    }
-
-    internal func updateOptions(
-        userId: String? = nil,
-        phoneNumber: String? = nil,
-        additionalAttributes: [String: String]? = nil
-    ) {
-        guard #available(iOS 15.0, *) else { return }
-
-        let builder = UpdateOption.UpdateOptionBuilder()
-        if let userId { _ = builder.setUserId(userId) }
-        if let phoneNumber { _ = builder.setPhoneNumber(phoneNumber) }
-        if let attrs = additionalAttributes { _ = builder.setAdditionalAttributes(attrs) }
-
-        IdentitySDK.getInstance().updateOptions(updateOption: builder.build())
     }
 
     // MARK: - Get Score
@@ -103,110 +64,147 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
     // This avoids capturing callback parameters (IntelligenceResponse) inside a Task,
     // which is a Swift 6 region-isolation violation.
     internal func getScore(
+        params: [String: String]? = nil,
+        updateInfo: UpdateInfo? = nil,
         completion: @escaping @Sendable (_ response: IntelligenceResponse?, _ error: IntelligenceError?, _ apiResponse: IntelligenceApiResponse?) -> Void
     ) {
         self.dfrID = ""
-        let state = SessionMgr.shared.getState() ?? ""
-
-        if state.isEmpty {
-            requestStateForDeviceIfNil { newState in
-                guard let newState = newState, !newState.isEmpty else { return }
-                SessionMgr.shared.setState(newState)
-            }
-        }
 
         guard #available(iOS 15.0, *) else {
-            OTPlessLogger.log("fetchIntelligence requires iOS 15.0 or later", level: .error)
+            IntelligenceEvents.getScoreFailed(reason: "ios_version_unsupported")
             let error = IntelligenceError(
-                requestId: SessionMgr.shared.getTsid(),
+                requestId: OtplessEventIO.shared.trackingIds.sessionId,
                 errorMessage: "Unsupported iOS version"
             )
             completion(nil, error, nil)
             return
         }
 
-        OTPlessLogger.log("Fetching device intelligence — tsId: \(SessionMgr.shared.getTsid())")
+        applyUpdateOptions(updateInfo)
+
+        IntelligenceEvents.requestIntelligenceStart()
+        OTPlessLogger.log("Fetching device intelligence — tsId: \(OtplessEventIO.shared.trackingIds.sessionId)")
 
         Task {
-            // Bridge the callback-based IdentitySDK API to async/await.
-            // SDKCallbackResult is @unchecked Sendable so it can be safely passed through
-            // withCheckedContinuation.resume(returning:) which requires a sending value.
-            let result = await withCheckedContinuation { (continuation: CheckedContinuation<SDKCallbackResult, Never>) in
-                IdentitySDK.getInstance().getIntelligence(
-                    listener: BridgeListener { r, e in
-                        continuation.resume(returning: SDKCallbackResult(response: r, error: e))
-                    }
-                )
-            }
+            // Engine call wrapped in a 500ms-base exponential retry loop (4 max).
+            let result = await DeviceIntelligenceManager.shared.runEngineWithRetry()
 
             let (response, sdkError) = (result.response, result.error)
 
             if let response {
                 OTPlessLogger.log("IdentityFraud response received — requestId: \(response.requestId ?? "nil")")
-                let apiResponse = await DeviceIntelligenceManager.shared.pushIntelligenceDataAndAwait(response: response)
-                completion(response, nil, apiResponse)
+                let rawPayload = DeviceIntelligenceManager.shared.buildRawJSON(from: response)
+                IntelligenceEvents.fetchPlayIntelligenceResult(payload: rawPayload)
+
+                let pushResult = await DeviceIntelligenceManager.shared.pushIntelligenceDataAndAwait(
+                    rawPayload: rawPayload,
+                    params: params
+                )
+                let publicResponse: IntelligenceApiResponse?
+                if let pushResult, let dfrId = pushResult.dfrId, !dfrId.isEmpty {
+                    publicResponse = IntelligenceApiResponse(
+                        dfrId: dfrId,
+                        intelligenceResponse: pushResult.rawResponse["intelligenceResponse"] as? [String: Any]
+                    )
+                    IntelligenceEvents.requestIntelligenceResult(success: true)
+                } else {
+                    publicResponse = nil
+                    IntelligenceEvents.requestIntelligenceResult(success: false)
+                }
+
+                completion(response, nil, publicResponse)
             } else if let sdkError {
                 OTPlessLogger.log("IdentityFraud error — requestId: \(sdkError.requestId), message: \(sdkError.errorMessage)", level: .error)
-                DeviceIntelligenceManager.shared.pushIntelligenceDataToServerWithIntelligenceError(error: sdkError)
+                IntelligenceEvents.fetchPlayIntelligenceError(
+                    requestId: sdkError.requestId,
+                    message: sdkError.errorMessage
+                )
+                DeviceIntelligenceManager.shared.pushIntelligenceDataToServerWithIntelligenceError(
+                    error: sdkError,
+                    params: params
+                )
+                IntelligenceEvents.requestIntelligenceResult(success: false)
                 completion(nil, sdkError, nil)
             } else {
+                IntelligenceEvents.requestIntelligenceResult(success: false)
                 completion(nil, nil, nil)
             }
         }
     }
 
+    /// Map our public `UpdateInfo` onto IdentityFraud's `UpdateOption` builder
+    /// using its typed setters (not the additionalAttributes catch-all).
+    ///
+    /// `setUserId(_:)`, `setPhoneNumber(_:)`, and `setMerchantId(_:)` take
+    /// `String?` in IdentityFraud's swiftinterface and are gated behind the
+    /// `$NonescapableTypes` Swift feature. To avoid forcing every consumer to
+    /// enable that experimental flag, we invoke those three via the ObjC
+    /// runtime (the methods are `@objc` and present in the binary).
+    @available(iOS 15.0, *)
+    private func applyUpdateOptions(_ updateInfo: UpdateInfo?) {
+        guard let updateInfo else { return }
+        let builder = UpdateOption.UpdateOptionBuilder()
+        if let phoneInput = updateInfo.phoneInputType {
+            builder.setPhoneInputType(phoneInput.identityFraudValue)
+        }
+        if let otpInput = updateInfo.otpInputType {
+            builder.setOtpInputType(otpInput.identityFraudValue)
+        }
+        if let userEvent = updateInfo.userEventType {
+            builder.setUserEventType(userEvent.identityFraudValue)
+        }
+        if let attrs = updateInfo.additionalInput, !attrs.isEmpty {
+            _ = builder.setAdditionalAttributes(attrs)
+        }
+        IdentitySDK.getInstance().updateOptions(updateOption: builder.build())
+    }
+
     // MARK: - Request Body Builder
 
-    private func getRequestMap(authMap: [String: String]) -> [String: Any] {
+    private func getRequestMap(
+        params: [String: String]?
+    ) -> [String: Any] {
         var requestData: [String: Any] = [
-            "tsId": SessionMgr.shared.getTsid(),
-            "platform": "IOS"
+            "tsId": OtplessEventIO.shared.trackingIds.sessionId,
+            "inId": OtplessEventIO.shared.trackingIds.installationId,
+            "platform": "IOS",
+            "appId": OTPlessIntelligence.shared.merchantAppId
         ]
 
-        requestData["inId"] = SessionMgr.shared.getInid()
-        requestData["appId"] = OTPlessIntelligence.shared.merchantAppId
-
-        if let rsId = SessionMgr.shared.getRsid(), !rsId.isEmpty {
-            requestData["rsId"] = rsId
+        // Generic pass-through of caller-supplied params (mirrors Android).
+        // Reserved keys are SDK-controlled and cannot be overridden by the host.
+        if let params {
+            for (key, value) in params
+            where !value.isEmpty && !Self.reservedParamKeys.contains(key) {
+                requestData[key] = value
+            }
         }
-
-        // Cached in SessionMgr.initialize() on the main thread to avoid main-actor isolation issues.
-        let idfv = SessionMgr.shared.vendorId
-        if !idfv.isEmpty {
-            requestData["gaId"] = idfv
-        }
-
-        if let state = SessionMgr.shared.getState(), !state.isEmpty {
-            requestData["state"] = state
-        }
-
-        if let asid = authMap["asId"], !asid.isEmpty {
-            requestData["asId"] = asid
-        }
-
-        if !self.dfrID.isEmpty {
-            requestData["dfrId"] = self.dfrID
-        }
-
-        if let token = authMap["token"], !token.isEmpty {
-            requestData["token"] = token
-        }
-
         return requestData
     }
 
+    /// Keys the SDK manages itself — `params` entries with these names are ignored
+    /// rather than overwriting the SDK-set values. Matches the Android reserved set
+    /// (`data`, `status`, `requestId`, `message`) plus iOS's own SDK-controlled keys.
+    private static let reservedParamKeys: Set<String> = ["data", "status", "requestId", "message", "tsId", "inId", "platform", "appId"]
+
     // MARK: - Push to Backend
 
-    private func pushIntelligenceDataToServerWithIntelligenceError(error: IntelligenceError) {
-        var requestMap = getRequestMap(authMap: [:])
+    private func pushIntelligenceDataToServerWithIntelligenceError(
+        error: IntelligenceError,
+        params: [String: String]?
+    ) {
+        var requestMap = getRequestMap(params: params)
         requestMap["data"] = ["requestId": error.requestId, "errorMessage": error.errorMessage]
         postIntelligencData(data: requestMap)
     }
 
-    private func pushIntelligenceDataAndAwait(response: IntelligenceResponse) async -> IntelligenceApiResponse? {
-        OTPlessLogger.log("Pushing intelligence data — requestId: \(response.requestId ?? "nil")")
-        var requestMap = getRequestMap(authMap: [:])
-        requestMap["data"] = buildRawJSON(from: response)
+    private func pushIntelligenceDataAndAwait(
+        rawPayload: [String: Any],
+        params: [String: String]?
+    ) async -> IntelligencePushResult? {
+        OTPlessLogger.log("Pushing intelligence data")
+        var requestMap = getRequestMap(params: params)
+        requestMap["data"] = rawPayload
         return await sendIntelligenceDataWithRetry(data: requestMap)
     }
 
@@ -234,50 +232,92 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
         }
     }
 
-    // Retry schedule: attempt 1 → wait 3s → attempt 2 → wait 6s → attempt 3 → error
+    // Retry schedule: BackoffTimer (500ms base, exponential, 4 max attempts).
+    // Matches Android Veritaserum SDK exactly.
     @discardableResult
-    private func sendIntelligenceDataWithRetry(data: [String: Any]) async -> IntelligenceApiResponse? {
-        let retryDelaysMs: [UInt64] = [3_000, 6_000]
-        let maxAttempts = 3
+    private func sendIntelligenceDataWithRetry(data: [String: Any]) async -> IntelligencePushResult? {
+        var backoff = BackoffTimer(baseDelayMs: 500, maxAttempts: 4)
 
-        for attempt in 1...maxAttempts {
+        while true {
             guard !Task.isCancelled else { return nil }
 
-            OTPlessLogger.log("Intelligence push attempt \(attempt)/\(maxAttempts)")
+            IntelligenceEvents.pushIntelligenceStart()
+            let attemptNum = backoff.attemptsMade + 1
+            OTPlessLogger.log("Intelligence push attempt \(attemptNum)")
             let response = await intelligenceDataUseCase.invoke(bodyParams: data)
 
             switch response {
             case .success(let resp):
                 if let dfrId = resp?.dfrId, !dfrId.isEmpty {
-                    OTPlessLogger.log("Intelligence push succeeded — dfrId: \(dfrId), responseKeys: \(Array(resp?.rawResponse.keys ?? [:].keys))")
+                    OTPlessLogger.log("Intelligence push succeeded — dfrId: \(dfrId)")
                     self.dfrID = dfrId
+                    let publicResponse = IntelligenceApiResponse(
+                        dfrId: dfrId,
+                        intelligenceResponse: resp?.rawResponse["intelligenceResponse"] as? [String: Any]
+                    )
+                    IntelligenceEvents.pushIntelligenceSuccess(response: publicResponse)
                     return resp
-                } else {
-                    OTPlessLogger.log("Intelligence push returned success but dfrId is missing (attempt \(attempt)/\(maxAttempts))", level: .error)
                 }
-            case .error(let error):
-                OTPlessLogger.log("Intelligence push failed (attempt \(attempt)/\(maxAttempts)) — \(error.message)", level: .error)
-            }
+                OTPlessLogger.log("Intelligence push returned success but dfrId is missing (attempt \(attemptNum))", level: .error)
 
-            if attempt < maxAttempts {
-                let delayMs = retryDelaysMs[attempt - 1]
-                OTPlessLogger.log("Retrying intelligence push in \(delayMs / 1_000)s…")
-                do {
-                    try await Task.sleep(nanoseconds: delayMs * 1_000_000)
-                } catch {
+                guard let delayMs = backoff.nextDelayMs() else {
+                    IntelligenceEvents.pushIntelligenceFailed()
                     return nil
                 }
-            } else {
-                OTPlessLogger.log("Intelligence push exhausted all \(maxAttempts) attempts", level: .error)
+                IntelligenceEvents.pushIntelligenceRetry(delayMs: delayMs, statusCode: nil)
+                try? await Task.sleep(nanoseconds: delayMs * 1_000_000)
+
+            case .error(let error):
+                OTPlessLogger.log("Intelligence push failed (attempt \(attemptNum)) — \(error.message)", level: .error)
+                guard let delayMs = backoff.nextDelayMs() else {
+                    IntelligenceEvents.pushIntelligenceFailed()
+                    return nil
+                }
+                IntelligenceEvents.pushIntelligenceRetry(
+                    delayMs: delayMs,
+                    statusCode: error.statusCode == 0 ? nil : error.statusCode
+                )
+                try? await Task.sleep(nanoseconds: delayMs * 1_000_000)
             }
         }
-        return nil
     }
 
-    internal func updateAuthMap(authMap: [String: String]) {
-        if !dfrID.isEmpty {
-            let requestMap = getRequestMap(authMap: authMap)
-            postIntelligencData(data: requestMap)
+    private static func currentTimeMs() -> Int {
+        Int(Date().timeIntervalSince1970 * 1000)
+    }
+
+    @available(iOS 15.0, *)
+    private func runEngineWithRetry() async -> SDKCallbackResult {
+        var backoff = BackoffTimer(baseDelayMs: 500, maxAttempts: 4)
+        var lastResult = SDKCallbackResult(response: nil, error: nil)
+
+        while true {
+            let result = await withCheckedContinuation { (continuation: CheckedContinuation<SDKCallbackResult, Never>) in
+                IdentitySDK.getInstance().getIntelligence(
+                    listener: BridgeListener { r, e in
+                        continuation.resume(returning: SDKCallbackResult(response: r, error: e))
+                    }
+                )
+            }
+
+            if result.response != nil {
+                return result
+            }
+
+            lastResult = result
+
+            guard let delayMs = backoff.nextDelayMs() else {
+                return lastResult
+            }
+
+            IntelligenceEvents.fetchIntelligenceRetry(delayMs: delayMs)
+            OTPlessLogger.log("Engine retry in \(delayMs)ms…")
+
+            do {
+                try await Task.sleep(nanoseconds: delayMs * 1_000_000)
+            } catch {
+                return lastResult
+            }
         }
     }
 }

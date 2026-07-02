@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'OTPlessIntelligence'
-  s.version          = '1.1.0'
+  s.version          = '1.2.0'
   s.summary          = 'OTPless device intelligence SDK for risk & fraud detection.'
   s.description      = <<-DESC
     OTPlessIntelligence is a device intelligence SDK used for risk scoring,
@@ -26,6 +26,8 @@ Pod::Spec.new do |s|
 
   # The xcframework used in the SPM binary target
   s.vendored_frameworks   = 'Frameworks/IdentityFraud.xcframework'
+
+  s.dependency 'OtplessEventIO', '~> 1.1.0'
 
   # Use targeted concurrency checking — allows the SDK to compile cleanly
   # under both Swift 5 and Swift 6 without full strict-concurrency migration.

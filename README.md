@@ -7,11 +7,12 @@ OTPless Intelligence SDK collects real-time device risk signals and sends them t
 **Internal flow:**
 
 ```
-configure(appID)
+initialize(appId)
     └── Fetch credentials from OTPless platform API
     └── Initialise IdentityFraud engine with those credentials
+    └── Bootstrap OtplessEventIO for telemetry + tracking IDs
 
-fetchIntelligence()
+fetchIntelligence(params:updateInfo:)
     └── IdentityFraud engine fingerprints the device
     └── Push raw signals to OTPless backend → receive dfrId
     └── Return complete raw backend response directly to your app
@@ -35,13 +36,10 @@ Using dfrId (server-side)
   - [Requesting Location Permission](#requesting-location-permission)
 - [Integration](#integration)
   - [Step 1 — Import](#step-1--import)
-  - [Step 2 — Configure](#step-2--configure)
-  - [Step 3 — Update User Context (Optional)](#step-3--update-user-context-optional)
-  - [Step 4 — Fetch Intelligence](#step-4--fetch-intelligence)
-  - [Step 5 — Get Detailed Intelligence (Server-side)](#step-5--get-detailed-intelligence-server-side)
-  - [Step 6 — Link Auth Session (OTPless Auth Users)](#step-6--link-auth-session-otpless-auth-users-only)
+  - [Step 2 — Initialize](#step-2--initialize)
+  - [Step 3 — Fetch Intelligence](#step-3--fetch-intelligence)
+  - [Step 4 — Get Detailed Intelligence (Server-side)](#step-4--get-detailed-intelligence-server-side)
 - [API Reference](#api-reference)
-- [OTPlessSessionContext Reference](#otplesssessioncontext-reference)
 - [Response Reference](#response-reference)
 - [Error Reference](#error-reference)
 - [SwiftUI Example](#swiftui-example)
@@ -56,7 +54,7 @@ Using dfrId (server-side)
 | Requirement | Value |
 |---|---|
 | iOS deployment target | 13.0+ |
-| Runtime (configure / fetchIntelligence) | iOS 15.0+ |
+| Runtime (initialize / fetchIntelligence) | iOS 15.0+ |
 | Swift | 5.5 – 6.0 |
 | Xcode | 14+ |
 
@@ -75,7 +73,7 @@ Using dfrId (server-side)
    ```
    https://github.com/otpless-tech/otpless-ios-intelligence-sdk
    ```
-3. Set version rule to **Up to Next Major Version** from `1.1.0`
+3. Set version rule to **Up to Next Major Version** from `1.2.0`
 4. Select **OTPlessIntelligence** and add to your target
 
 **Via Package.swift:**
@@ -84,7 +82,7 @@ Using dfrId (server-side)
 dependencies: [
     .package(
         url: "https://github.com/otpless-tech/otpless-ios-intelligence-sdk",
-        from: "1.1.0"
+        from: "1.2.0"
     )
 ],
 targets: [
@@ -106,7 +104,7 @@ platform :ios, '13.0'
 
 target 'YourApp' do
   use_frameworks!
-  pod 'OTPlessIntelligence', '~> 1.1.0'
+  pod 'OTPlessIntelligence', '~> 1.2.0'
 end
 ```
 
@@ -167,7 +165,7 @@ import OTPlessIntelligence
 
 ---
 
-### Step 2 — Configure
+### Step 2 — Initialize
 
 Call **once**, as early as possible — in `AppDelegate` or SwiftUI `@main init()`.
 
@@ -186,7 +184,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     ) -> Bool {
 
         if #available(iOS 15.0, *) {
-            OTPlessIntelligence.shared.configure(appID: "YOUR_APP_ID") { success in
+            OTPlessIntelligence.shared.initialize(appId: "YOUR_APP_ID") { success in
                 print("OTPless Intelligence ready: \(success)")
             }
         }
@@ -205,29 +203,13 @@ import OTPlessIntelligence
 struct MyApp: App {
     init() {
         if #available(iOS 15.0, *) {
-            OTPlessIntelligence.shared.configure(appID: "YOUR_APP_ID") { success in
+            OTPlessIntelligence.shared.initialize(appId: "YOUR_APP_ID") { success in
                 print("OTPless Intelligence ready: \(success)")
             }
         }
     }
     var body: some Scene {
         WindowGroup { ContentView() }
-    }
-}
-```
-
-**With session context** — when you already have session IDs (e.g. from OTPless Auth SDK):
-
-```swift
-if #available(iOS 15.0, *) {
-    let context = OTPlessSessionContext(
-        rsId: "rs-abc123",
-        inId: "86f0a8f0-...",
-        tsId: authSDK.gettsID(),
-        state: authSDK.getState()
-    )
-    OTPlessIntelligence.shared.configure(appID: "YOUR_APP_ID", sessionContext: context) { success in
-        print("OTPless Intelligence ready: \(success)")
     }
 }
 ```
@@ -243,48 +225,63 @@ false → SDK failed to initialise (check [OTPless] console logs in debug builds
 
 ---
 
-### Step 3 — Update User Context (Optional)
+### Step 3 — Fetch Intelligence
 
-Call before `fetchIntelligence()` to improve fraud detection accuracy:
+**Swift (recommended — async/await):**
 
 ```swift
 if #available(iOS 15.0, *) {
-    OTPlessIntelligence.shared.updateOptions(
-        userId: "user_123",
-        phoneNumber: "+919876543210",
-        additionalAttributes: ["eventType": "LOGIN"]
-    )
+    Task {
+        do {
+            let response = try await OTPlessIntelligence.shared.fetchIntelligence(
+                params: ["state": stateToken, "rsId": rsId],
+                updateInfo: UpdateInfo(userId: "user_123", userEventType: .login)
+            )
+            print("dfrId: \(response.dfrId)")
+
+            // Send dfrId to your backend to get the full intelligence report
+            // See Step 4 (server-side)
+        } catch {
+            self.handleError(error)
+        }
+    }
 }
 ```
 
-All parameters are optional. Options reset after each `fetchIntelligence()` call.
+**Swift / ObjC (callback):**
 
----
-
-### Step 4 — Fetch Intelligence
+The callback form is bridged to Objective-C, so `updateInfo` is a dictionary (not the typed `UpdateInfo` struct) and the completion is a flat `(Bool, String?, NSDictionary?, String?)`:
 
 ```swift
 if #available(iOS 15.0, *) {
-    OTPlessIntelligence.shared.fetchIntelligence { result in
+    OTPlessIntelligence.shared.fetchIntelligence(
+        params: ["state": stateToken, "rsId": rsId],
+        updateInfo: ["userId": "user_123", "userEventType": "LOGIN"]
+    ) { success, dfrId, intelligenceResponse, errorMessage in
         DispatchQueue.main.async {
-            switch result {
-            case .success(let response):
-                // response is [String: Any] — complete raw backend JSON
-                let dfrId = response["dfrId"] as? String
-                print("dfrId: \(dfrId ?? "nil")")
-
-                // Send dfrId to your backend to get the full intelligence report
-                // See Step 5
-
-            case .failure(let error):
-                self.handleError(error)
+            if success, let dfrId {
+                print("dfrId: \(dfrId)")
+                // Send dfrId to your backend (Step 4)
+            } else {
+                self.handleError(errorMessage)
             }
         }
     }
 }
 ```
 
-**Response — success:**
+Both `params` and `updateInfo` are optional — pass `nil` if you don't need them. `params` is a generic pass-through: every non-reserved key you supply is forwarded into the push body verbatim (matches the Android SDK). Reserved keys (managed by the SDK): `data`, `status`, `requestId`, `message`, plus the SDK-set `tsId`, `inId`, `platform`, `appId`.
+
+`updateInfo` (dict form) accepts keys `userId`, `phoneNumber`, `merchantId`, `phoneInputType`, `otpInputType`, `userEventType`, `additionalInput`. Enum-typed fields expect raw-value strings matching the case names (`"MANUAL"`, `"COPY_PASTED"`, `"LOGIN"`, …). Unknown keys and invalid enum strings are silently dropped.
+
+**Response — success:** `IntelligenceApiResponse`
+
+```swift
+public struct IntelligenceApiResponse {
+    public let dfrId: String
+    public let intelligenceResponse: [String: Any]?
+}
+```
 
 ```json
 {
@@ -293,30 +290,26 @@ if #available(iOS 15.0, *) {
 }
 ```
 
-> `intelligenceResponse` is `null` today. Once the backend starts populating it, it will appear in the same dictionary automatically — no SDK update needed.
+> `intelligenceResponse` is `null` today. Once the backend starts populating it, it will appear in `response.intelligenceResponse` automatically — no SDK update needed.
 
 **Response — failure:**
 
-| Error case | When it occurs |
-|---|---|
-| `.notConfigured` | `configure()` not called or returned `false` |
-| `.intelligenceError(requestId:message:)` | Engine error, push failed, or `dfrId` missing after all 3 retries |
-| `.unknown` | Unexpected internal state |
+The async form throws `OTPlessIntelligenceError`; the callback form flattens it to `(success: false, dfrId: nil, intelligenceResponse: nil, errorMessage: String)`.
 
-**Retry logic:**
+| Error case (async) | Callback `errorMessage` | When it occurs |
+|---|---|---|
+| `.notConfigured` | `"SDK not initialised"` | `initialize()` not called or returned `false` |
+| `.intelligenceError(requestId:message:)` | server-provided message | Engine error, push failed, or `dfrId` missing after all retries |
+| `.unknown` | `"Unknown intelligence error"` | Unexpected internal state |
 
-| Attempt | Delay before next |
-|---|---|
-| 1 | 3 seconds |
-| 2 | 6 seconds |
-| 3 | Error returned if still failing |
+**Retry logic** — both the engine call and the push use `BackoffTimer` with 500 ms base, exponential, max 4 attempts (matches Android Veritaserum SDK). Delays: 500 ms → 1 s → 2 s → 4 s → error.
 
 > `fetchIntelligence` waits for the backend push to complete before calling your closure.  
 > Completion is called on a background thread — use `DispatchQueue.main.async` before any UI update.
 
 ---
 
-### Step 5 — Get Detailed Intelligence (Server-side)
+### Step 4 — Get Detailed Intelligence (Server-side)
 
 After receiving `dfrId`, your **backend server** calls the OTPless platform to get the full detailed report.
 
@@ -357,115 +350,91 @@ iOS App                    Your Backend Server        OTPless Platform
 
 ---
 
-### Step 6 — Link Auth Session (OTPless Auth Users Only)
-
-If your app also uses the OTPless Auth SDK, call this after a successful authentication:
-
-```swift
-OTPlessIntelligence.shared.updateAuthSessionWithIntelligence(authMap: [
-    "asId": authSessionId,
-    "token": authToken
-])
-```
-
-> No-op if `fetchIntelligence()` has not succeeded in the current session.
-
----
-
 ## API Reference
 
-### `configure(appID:sessionContext:completion:)`
+### `initialize(appId:completion:)`
 
 ```swift
 @available(iOS 15.0, *)
-public func configure(
-    appID: String,
-    sessionContext: OTPlessSessionContext? = nil,
+public func initialize(
+    appId: String,
     completion: @escaping (Bool) -> Void
 )
 ```
 
 | Parameter | Required | Description |
 |---|---|---|
-| `appID` | Yes | Your OTPless App ID |
-| `sessionContext` | No | Optional session IDs — pass `nil` to skip |
+| `appId` | Yes | Your OTPless App ID |
 | `completion` | Yes | `true` = ready, `false` = failed. Called on a background thread. |
 
 ---
 
-### `updateOptions(userId:phoneNumber:additionalAttributes:)`
+### `isInitialized`
 
 ```swift
-@available(iOS 15.0, *)
-public func updateOptions(
-    userId: String? = nil,
-    phoneNumber: String? = nil,
-    additionalAttributes: [String: String]? = nil
-)
+public var isInitialized: Bool { get }
 ```
 
-All parameters optional. Enriches the next `fetchIntelligence()` call with user context.
+`true` once `initialize(appId:completion:)` has completed successfully. Equivalent to Android `OtplessDeviceIntelligence.isInit`.
 
 ---
 
-### `fetchIntelligence(completion:)`
+### `fetchIntelligence(params:updateInfo:completion:)` — callback (ObjC-bridged)
+
+```swift
+@available(iOS 15.0, *)
+@objc(fetchIntelligenceWithParams:updateInfo:completion:)
+public func fetchIntelligence(
+    params: [String: String]?,
+    updateInfo: [String: Any]?,
+    completion: @escaping (Bool, String?, NSDictionary?, String?) -> Void
+    //                    success, dfrId, intelligenceResponse, errorMessage
+)
+```
+
+### `fetchIntelligence(params:updateInfo:)` — async/await (Swift only)
 
 ```swift
 @available(iOS 15.0, *)
 public func fetchIntelligence(
-    completion: @escaping (Result<[String: Any], OTPlessIntelligenceError>) -> Void
-)
+    params: [String: String]? = nil,
+    updateInfo: UpdateInfo? = nil
+) async throws -> IntelligenceApiResponse
 ```
 
-Returns the complete raw backend response dictionary directly on success.
-
-- Retries up to 3 times if push fails or `dfrId` is missing (immediate → +3s → +6s)
-- Waits for the backend push to complete before calling your closure
-- Completion called on a background thread
-
----
-
-### `updateAuthSessionWithIntelligence(authMap:)`
-
-```swift
-public func updateAuthSessionWithIntelligence(authMap: [String: String])
-```
-
-| Key | Description |
+| Parameter | Description |
 |---|---|
-| `"asId"` | Auth Session ID from OTPless auth response |
-| `"token"` | Token from OTPless auth response |
+| `params` | Optional per-call map. Every non-reserved key is forwarded into the push body verbatim (matches Android). Typical keys: `"state"`, `"rsId"`. Reserved (SDK-managed): `data`, `status`, `requestId`, `message`, plus the SDK-set `tsId`, `inId`, `platform`, `appId`. Never persisted. |
+| `updateInfo` | Optional per-call enrichment. Typed `UpdateInfo` on the async form; `[String: Any]` dictionary on the callback form (see Step 3 for the accepted keys). |
+| `completion` | Called on a background thread. |
+
+Retry behaviour: both the engine call and the push use `BackoffTimer` with 500 ms base, exponential, max 4 attempts (matches Android Veritaserum SDK).
 
 ---
 
-### `gettsID()`
+### `UpdateInfo`
 
 ```swift
-@objc public func gettsID() -> String
-```
+public struct UpdateInfo {
+    public let userId: String?
+    public let phoneNumber: String?
+    public let merchantId: String?
+    public let phoneInputType: PhoneInputType?
+    public let otpInputType: OtpInputType?
+    public let userEventType: UserEventType?
+    public let additionalInput: [String: String]?
+}
 
-Returns the current tracking session ID. Use for log correlation.
-
----
-
-## OTPlessSessionContext Reference
-
-```swift
-@objcMembers
-public class OTPlessSessionContext: NSObject {
-    public let rsId: String?    // request/session ID from upstream flow
-    public let inId: String?    // installation ID
-    public let tsId: String?    // tracking session ID
-    public let state: String?   // server-issued state token
+public enum PhoneInputType: String {
+    case manual = "MANUAL", copyPasted = "COPY_PASTED", googleHint = "GOOGLE_HINT"
+}
+public enum OtpInputType: String {
+    case manual = "MANUAL", copyPasted = "COPY_PASTED", autoFilled = "AUTO_FILLED"
+}
+public enum UserEventType: String {
+    case login = "LOGIN", signup = "SIGNUP", transaction = "TRANSACTION", others = "OTHERS"
 }
 ```
-
-| ID | Provided | Not provided |
-|---|---|---|
-| `tsId` | Used as-is | Borrowed from OTPless Auth SDK if present, else generated |
-| `inId` | Used as-is, saved to UserDefaults | Restored from UserDefaults, or generated |
-| `state` | Used as-is, saved to Keychain | Restored from Keychain, or fetched lazily |
-| `rsId` | Sent in every push body | Omitted from push body |
 
 ---
 
@@ -473,7 +442,14 @@ public class OTPlessSessionContext: NSObject {
 
 ### `fetchIntelligence` — Success
 
-`[String: Any]` — the complete raw backend response.
+```swift
+public struct IntelligenceApiResponse {
+    public let dfrId: String
+    public let intelligenceResponse: [String: Any]?
+}
+```
+
+`intelligenceResponse` mirrors the raw backend response payload.
 
 **Current:**
 ```json
@@ -542,9 +518,11 @@ public enum OTPlessIntelligenceError: Error {
 
 | Case | When | Action |
 |---|---|---|
-| `notConfigured` | `fetchIntelligence()` before `configure()` succeeded | Call `configure(appID:)` at launch, wait for `true` before calling `fetchIntelligence()` |
-| `intelligenceError(requestId:message:)` | Engine error, push failed, `dfrId` missing after 3 retries | Log `requestId` for support. Degrade gracefully. |
+| `notConfigured` | `fetchIntelligence()` before `initialize()` succeeded | Call `initialize(appId:)` at launch, wait for `true` before calling `fetchIntelligence()` |
+| `intelligenceError(requestId:message:)` | Engine error, push failed, `dfrId` missing after all retries | Log `requestId` for support. Degrade gracefully. |
 | `unknown` | Unexpected state | Degrade gracefully |
+
+> The callback form of `fetchIntelligence` collapses all failure cases into a single `errorMessage: String?` — the mapping is shown in Step 3.
 
 **Always degrade gracefully:**
 
@@ -565,7 +543,7 @@ import OTPlessIntelligence
 struct MyApp: App {
     init() {
         if #available(iOS 15.0, *) {
-            OTPlessIntelligence.shared.configure(appID: "YOUR_APP_ID") { _ in }
+            OTPlessIntelligence.shared.initialize(appId: "YOUR_APP_ID") { _ in }
         }
     }
     var body: some Scene {
@@ -581,19 +559,15 @@ class LoginViewModel: ObservableObject {
         guard #available(iOS 15.0, *) else { return }
         isLoading = true
 
-        OTPlessIntelligence.shared.fetchIntelligence { [weak self] result in
-            Task { @MainActor in
-                self?.isLoading = false
-                switch result {
-                case .success(let response):
-                    let dfrId = response["dfrId"] as? String
-                    print("dfrId: \(dfrId ?? "nil")")
-                    // send dfrId to your backend
-
-                case .failure(let error):
-                    print("Intelligence error: \(error)")
-                    // degrade gracefully
-                }
+        Task {
+            defer { isLoading = false }
+            do {
+                let response = try await OTPlessIntelligence.shared.fetchIntelligence()
+                print("dfrId: \(response.dfrId)")
+                // send dfrId to your backend
+            } catch {
+                print("Intelligence error: \(error)")
+                // degrade gracefully
             }
         }
     }
@@ -615,62 +589,53 @@ struct LoginView: View {
 
 ## Objective-C Integration
 
-**Configure:**
+`initialize` and the callback form of `fetchIntelligence` are bridged directly — no Swift shim required.
+
+**Initialize:**
 
 ```objc
 #import <OTPlessIntelligence/OTPlessIntelligence-Swift.h>
 
 if (@available(iOS 15.0, *)) {
-    [[OTPlessIntelligence shared] configureWithAppID:@"YOUR_APP_ID"
-                                      sessionContext:nil
-                                          completion:^(BOOL success) {
+    [[OTPlessIntelligence shared] initializeWithAppId:@"YOUR_APP_ID"
+                                            completion:^(BOOL success) {
         NSLog(@"[OTPless] ready: %@", success ? @"YES" : @"NO");
     }];
 }
 ```
 
-**Fetch intelligence** — use a Swift bridge since `Result<[String: Any], ...>` is not ObjC-friendly:
-
-```swift
-// IntelligenceBridge.swift — add to your project
-import OTPlessIntelligence
-
-@objc class IntelligenceBridge: NSObject {
-    @available(iOS 15.0, *)
-    @objc static func fetch(
-        success: @escaping ([String: Any]) -> Void,
-        failure: @escaping (String) -> Void
-    ) {
-        OTPlessIntelligence.shared.fetchIntelligence { result in
-            switch result {
-            case .success(let response):
-                success(response)
-            case .failure(let e):
-                if case .intelligenceError(_, let msg) = e { failure(msg) }
-                else { failure("Intelligence error") }
-            }
-        }
-    }
-}
-```
+**Fetch intelligence:**
 
 ```objc
 if (@available(iOS 15.0, *)) {
-    [IntelligenceBridge fetchWithSuccess:^(NSDictionary *response) {
-        NSString *dfrId = response[@"dfrId"];
-        NSLog(@"dfrId: %@", dfrId);
-        // send dfrId to your backend
-    } failure:^(NSString *message) {
-        NSLog(@"Error: %@", message);
+    [[OTPlessIntelligence shared]
+        fetchIntelligenceWithParams:@{@"state": stateToken, @"rsId": rsId}
+                         updateInfo:@{@"userId": @"user_123",
+                                      @"userEventType": @"LOGIN"}
+                         completion:^(BOOL success,
+                                      NSString * _Nullable dfrId,
+                                      NSDictionary * _Nullable intelligenceResponse,
+                                      NSString * _Nullable errorMessage) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (success) {
+                NSLog(@"dfrId: %@", dfrId);
+                // send dfrId to your backend (Step 4)
+            } else {
+                NSLog(@"Error: %@", errorMessage);
+                // degrade gracefully
+            }
+        });
     }];
 }
 ```
+
+`updateInfo` keys mirror the Swift `UpdateInfo` fields: `userId`, `phoneNumber`, `merchantId`, `phoneInputType`, `otpInputType`, `userEventType`, `additionalInput`. Enum-typed fields expect raw-value strings (`@"MANUAL"`, `@"COPY_PASTED"`, `@"LOGIN"`, …); unknown keys and invalid enum strings are silently dropped. Pass `nil` for either dictionary if you don't need it.
 
 ---
 
 ## Troubleshooting
 
-### `configure` returns `false`
+### `initialize` returns `false`
 
 Check the Xcode console for `[OTPless]` logs (visible in debug builds only):
 
@@ -685,14 +650,14 @@ Check the Xcode console for `[OTPless]` logs (visible in debug builds only):
 
 ### `fetchIntelligence` returns `.notConfigured`
 
-`configure()` was called but `fetchIntelligence()` ran before it finished:
+`initialize()` was called but `fetchIntelligence()` ran before it finished:
 
 ```swift
 // ❌ Wrong
-OTPlessIntelligence.shared.configure(appID: "...") { _ in }
+OTPlessIntelligence.shared.initialize(appId: "...") { _ in }
 OTPlessIntelligence.shared.fetchIntelligence { _ in }
 
-// ✅ Correct — configure at launch, fetchIntelligence on a different screen
+// ✅ Correct — initialize at launch, fetchIntelligence on a different screen
 ```
 
 ---
@@ -739,6 +704,20 @@ Always test on a **real device** before App Store submission — some signals ar
 ---
 
 ## Changelog
+
+### 1.2.0
+- **Breaking:** `configure(appID:sessionContext:completion:)` renamed to `initialize(appId:completion:)`. `OTPlessSessionContext` removed entirely.
+- **Breaking:** `fetchIntelligence(completion:)` signature changes — now `fetchIntelligence(params:updateInfo:completion:)`. The callback form is ObjC-bridged: `updateInfo` is `[String: Any]?` and completion is `(Bool, String?, NSDictionary?, String?)` (success, dfrId, intelligenceResponse, errorMessage). Swift callers wanting typed access should use the async form. Every non-reserved key in `params` is forwarded into the push body verbatim (matches Android). Typical keys: `"state"`, `"rsId"`.
+- **Breaking:** `updateAuthSessionWithIntelligence(authMap:)` and `gettsID()` removed from the public surface.
+- **Breaking:** `updateOptions(userId:phoneNumber:additionalAttributes:)` removed — pass per-call via `UpdateInfo` instead.
+- **Breaking:** `PhoneInputType`, `OtpInputType`, `UserEventType` cases renamed to lowerCamelCase (`.manual`, `.copyPasted`, `.googleHint`, `.autoFilled`, `.login`, `.signup`, `.transaction`, `.others`) per Swift API design guidelines. Raw string values are unchanged, so the wire format and ObjC dict inputs (`"MANUAL"`, `"COPY_PASTED"`, `"LOGIN"`, …) stay identical.
+- **Breaking:** `state` is no longer persisted in Keychain or auto-fetched. Callers supply it via `params["state"]` at each call.
+- Added `async`/`await` variant: `fetchIntelligence(params:updateInfo:) async throws -> IntelligenceApiResponse` — returns typed `IntelligenceApiResponse` and throws `OTPlessIntelligenceError`.
+- Added `isInitialized: Bool` property.
+- `tsId` / `inId` are now sourced from `OtplessEventIO.trackingIds` — single source of truth shared with other OTPless SDKs.
+- Engine-side retry added (500 ms base, exponential, 4 max attempts) — matches Android Veritaserum SDK.
+- Push retry schedule migrated to the same `BackoffTimer` (500 ms base, 4 attempts), replacing the previous fixed 3 s / 6 s schedule.
+- Telemetry: every state transition is now emitted as an `afp_*` event via `OtplessEventIO`. Events: `afp_initialize_called`, `afp_get_intelligence_called`, `afp_get_intelligence_async_called`, `afp_request_intelligence`, `afp_request_intelligence_result`, `afp_config_cached`, `afp_awaiting_init`, `afp_fetch_intelligence_retry`, `afp_init_play_intelligence`, `afp_fetch_play_intelligence_result`, `afp_fetch_play_intelligence_error`, `afp_push_intelligence`, `afp_push_intelligence_retry`, `afp_push_intelligence_failed`.
 
 ### 1.1.0
 - `configure()` only requires `appID` — credentials fetched automatically

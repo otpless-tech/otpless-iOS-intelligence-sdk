@@ -16,6 +16,7 @@ internal class GetConfig {
         case .success(let config):
             OTPlessLogger.log("Config fetch succeeded")
             IntelligenceEvents.configCached(clientId: config.intelligenceClientId)
+            self.config = config
             return config
         case .failure(let error):
             OTPlessLogger.log("Config fetch failed — \(error.localizedDescription)", level: .error)

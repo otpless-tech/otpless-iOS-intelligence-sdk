@@ -235,7 +235,7 @@ if #available(iOS 15.0, *) {
         do {
             let response = try await OTPlessIntelligence.shared.fetchIntelligence(
                 params: ["state": stateToken, "rsId": rsId],
-                updateInfo: UpdateInfo(userId: "user_123", userEventType: .LOGIN)
+                updateInfo: UpdateInfo(userId: "user_123", userEventType: .login)
             )
             print("dfrId: \(response.dfrId)")
 
@@ -425,9 +425,15 @@ public struct UpdateInfo {
     public let additionalInput: [String: String]?
 }
 
-public enum PhoneInputType: String { case MANUAL, COPY_PASTED, GOOGLE_HINT }
-public enum OtpInputType:   String { case MANUAL, COPY_PASTED, AUTO_FILLED }
-public enum UserEventType:  String { case LOGIN, SIGNUP, TRANSACTION, OTHERS }
+public enum PhoneInputType: String {
+    case manual = "MANUAL", copyPasted = "COPY_PASTED", googleHint = "GOOGLE_HINT"
+}
+public enum OtpInputType: String {
+    case manual = "MANUAL", copyPasted = "COPY_PASTED", autoFilled = "AUTO_FILLED"
+}
+public enum UserEventType: String {
+    case login = "LOGIN", signup = "SIGNUP", transaction = "TRANSACTION", others = "OTHERS"
+}
 ```
 
 ---
@@ -704,6 +710,7 @@ Always test on a **real device** before App Store submission — some signals ar
 - **Breaking:** `fetchIntelligence(completion:)` signature changes — now `fetchIntelligence(params:updateInfo:completion:)`. The callback form is ObjC-bridged: `updateInfo` is `[String: Any]?` and completion is `(Bool, String?, NSDictionary?, String?)` (success, dfrId, intelligenceResponse, errorMessage). Swift callers wanting typed access should use the async form. Every non-reserved key in `params` is forwarded into the push body verbatim (matches Android). Typical keys: `"state"`, `"rsId"`.
 - **Breaking:** `updateAuthSessionWithIntelligence(authMap:)` and `gettsID()` removed from the public surface.
 - **Breaking:** `updateOptions(userId:phoneNumber:additionalAttributes:)` removed — pass per-call via `UpdateInfo` instead.
+- **Breaking:** `PhoneInputType`, `OtpInputType`, `UserEventType` cases renamed to lowerCamelCase (`.manual`, `.copyPasted`, `.googleHint`, `.autoFilled`, `.login`, `.signup`, `.transaction`, `.others`) per Swift API design guidelines. Raw string values are unchanged, so the wire format and ObjC dict inputs (`"MANUAL"`, `"COPY_PASTED"`, `"LOGIN"`, …) stay identical.
 - **Breaking:** `state` is no longer persisted in Keychain or auto-fetched. Callers supply it via `params["state"]` at each call.
 - Added `async`/`await` variant: `fetchIntelligence(params:updateInfo:) async throws -> IntelligenceApiResponse` — returns typed `IntelligenceApiResponse` and throws `OTPlessIntelligenceError`.
 - Added `isInitialized: Bool` property.

@@ -162,7 +162,6 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
     // MARK: - Request Body Builder
 
     private func getRequestMap(
-        authMap: [String: String],
         params: [String: String]?
     ) -> [String: Any] {
         var requestData: [String: Any] = [
@@ -186,7 +185,7 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
     /// Keys the SDK manages itself — `params` entries with these names are ignored
     /// rather than overwriting the SDK-set values. Matches the Android reserved set
     /// (`data`, `status`, `requestId`, `message`) plus iOS's own SDK-controlled keys.
-    private static let reservedParamKeys: Set<String> = ["data", "status", "requestId", "message"]
+    private static let reservedParamKeys: Set<String> = ["data", "status", "requestId", "message", "tsId", "inId", "platform", "appId"]
 
     // MARK: - Push to Backend
 
@@ -194,7 +193,7 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
         error: IntelligenceError,
         params: [String: String]?
     ) {
-        var requestMap = getRequestMap(authMap: [:], params: params)
+        var requestMap = getRequestMap(params: params)
         requestMap["data"] = ["requestId": error.requestId, "errorMessage": error.errorMessage]
         postIntelligencData(data: requestMap)
     }
@@ -204,7 +203,7 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
         params: [String: String]?
     ) async -> IntelligencePushResult? {
         OTPlessLogger.log("Pushing intelligence data")
-        var requestMap = getRequestMap(authMap: [:], params: params)
+        var requestMap = getRequestMap(params: params)
         requestMap["data"] = rawPayload
         return await sendIntelligenceDataWithRetry(data: requestMap)
     }
@@ -280,13 +279,6 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
                 )
                 try? await Task.sleep(nanoseconds: delayMs * 1_000_000)
             }
-        }
-    }
-
-    internal func updateAuthMap(authMap: [String: String]) {
-        if !dfrID.isEmpty {
-            let requestMap = getRequestMap(authMap: authMap, params: nil)
-            postIntelligencData(data: requestMap)
         }
     }
 

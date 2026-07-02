@@ -1,22 +1,22 @@
 import Foundation
 
 public enum PhoneInputType: String, Sendable {
-    case MANUAL
-    case COPY_PASTED
-    case GOOGLE_HINT
+    case manual = "MANUAL"
+    case copyPasted = "COPY_PASTED"
+    case googleHint = "GOOGLE_HINT"
 }
 
 public enum OtpInputType: String, Sendable {
-    case MANUAL
-    case COPY_PASTED
-    case AUTO_FILLED
+    case manual = "MANUAL"
+    case copyPasted = "COPY_PASTED"
+    case autoFilled = "AUTO_FILLED"
 }
 
 public enum UserEventType: String, Sendable {
-    case LOGIN
-    case SIGNUP
-    case TRANSACTION
-    case OTHERS
+    case login = "LOGIN"
+    case signup = "SIGNUP"
+    case transaction = "TRANSACTION"
+    case others = "OTHERS"
 }
 
 public struct UpdateInfo: Sendable {

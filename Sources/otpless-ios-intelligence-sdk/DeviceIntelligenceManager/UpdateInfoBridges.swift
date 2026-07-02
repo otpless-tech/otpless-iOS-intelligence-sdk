@@ -10,9 +10,9 @@ import Foundation
 internal extension PhoneInputType {
     var identityFraudValue: IdentityFraud.PhoneInputType {
         switch self {
-        case .MANUAL:      return IdentityFraud.PhoneInputType.MANUAL
-        case .COPY_PASTED: return IdentityFraud.PhoneInputType.COPY_PASTE
-        case .GOOGLE_HINT: return IdentityFraud.PhoneInputType.GOOGLE_HINT
+        case .manual:     return IdentityFraud.PhoneInputType.MANUAL
+        case .copyPasted: return IdentityFraud.PhoneInputType.COPY_PASTE
+        case .googleHint: return IdentityFraud.PhoneInputType.GOOGLE_HINT
         }
     }
 }
@@ -20,9 +20,9 @@ internal extension PhoneInputType {
 internal extension OtpInputType {
     var identityFraudValue: IdentityFraud.OtpInputType {
         switch self {
-        case .MANUAL:      return IdentityFraud.OtpInputType.MANUAL
-        case .COPY_PASTED: return IdentityFraud.OtpInputType.COPY_PASTED
-        case .AUTO_FILLED: return IdentityFraud.OtpInputType.AUTO_FILLED
+        case .manual:     return IdentityFraud.OtpInputType.MANUAL
+        case .copyPasted: return IdentityFraud.OtpInputType.COPY_PASTED
+        case .autoFilled: return IdentityFraud.OtpInputType.AUTO_FILLED
         }
     }
 }
@@ -30,10 +30,10 @@ internal extension OtpInputType {
 internal extension UserEventType {
     var identityFraudValue: IdentityFraud.UserEventType {
         switch self {
-        case .LOGIN:       return IdentityFraud.UserEventType.LOGIN
-        case .SIGNUP:      return IdentityFraud.UserEventType.SIGNUP
-        case .TRANSACTION: return IdentityFraud.UserEventType.TRANSACTION
-        case .OTHERS:      return IdentityFraud.UserEventType.OTHERS
+        case .login:       return IdentityFraud.UserEventType.LOGIN
+        case .signup:      return IdentityFraud.UserEventType.SIGNUP
+        case .transaction: return IdentityFraud.UserEventType.TRANSACTION
+        case .others:      return IdentityFraud.UserEventType.OTHERS
         }
     }
 }

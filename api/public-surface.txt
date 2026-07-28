@@ -1,0 +1,49 @@
+public swift.class OTPlessIntelligence :: @objc final class OTPlessIntelligence
+public swift.enum OTPlessIntelligenceError :: enum OTPlessIntelligenceError
+public swift.enum OtpInputType :: enum OtpInputType
+public swift.enum PhoneInputType :: enum PhoneInputType
+public swift.enum UserEventType :: enum UserEventType
+public swift.enum.case OTPlessIntelligenceError.intelligenceError(requestId:message:) :: case intelligenceError(requestId: String, message: String)
+public swift.enum.case OTPlessIntelligenceError.notConfigured :: case notConfigured
+public swift.enum.case OTPlessIntelligenceError.unknown :: case unknown
+public swift.enum.case OtpInputType.autoFilled :: case autoFilled
+public swift.enum.case OtpInputType.copyPasted :: case copyPasted
+public swift.enum.case OtpInputType.manual :: case manual
+public swift.enum.case PhoneInputType.copyPasted :: case copyPasted
+public swift.enum.case PhoneInputType.googleHint :: case googleHint
+public swift.enum.case PhoneInputType.manual :: case manual
+public swift.enum.case UserEventType.login :: case login
+public swift.enum.case UserEventType.others :: case others
+public swift.enum.case UserEventType.signup :: case signup
+public swift.enum.case UserEventType.transaction :: case transaction
+public swift.func.op OtpInputType.!=(_:_:) :: static func != (lhs: Self, rhs: Self) -> Bool
+public swift.func.op PhoneInputType.!=(_:_:) :: static func != (lhs: Self, rhs: Self) -> Bool
+public swift.func.op UserEventType.!=(_:_:) :: static func != (lhs: Self, rhs: Self) -> Bool
+public swift.init IntelligenceApiResponse.init(dfrId:intelligenceResponse:) :: init(dfrId: String, intelligenceResponse: [String : Any]?)
+public swift.init OtpInputType.init(rawValue:) :: init?(rawValue: String)
+public swift.init PhoneInputType.init(rawValue:) :: init?(rawValue: String)
+public swift.init UpdateInfo.init(userId:phoneNumber:merchantId:phoneInputType:otpInputType:userEventType:additionalInput:) :: init(userId: String? = nil, phoneNumber: String? = nil, merchantId: String? = nil, phoneInputType: PhoneInputType? = nil, otpInputType: OtpInputType? = nil, userEventType: UserEventType? = nil, additionalInput: [String : String]? = nil)
+public swift.init UserEventType.init(rawValue:) :: init?(rawValue: String)
+public swift.method OTPlessIntelligence.fetchIntelligence(params:updateInfo:) :: func fetchIntelligence(params: [String : String]? = nil, updateInfo: UpdateInfo? = nil) async throws -> IntelligenceApiResponse
+public swift.method OTPlessIntelligence.fetchIntelligence(params:updateInfo:completion:) :: @objc(fetchIntelligenceWithParams:updateInfo:completion:) func fetchIntelligence(params: [String : String]?, updateInfo: [String : Any]?, completion: @escaping @Sendable (Bool, String?, NSDictionary?, String?) -> Void)
+public swift.method OTPlessIntelligence.initialize(appId:completion:) :: @objc(initializeWithAppId:completion:) func initialize(appId: String, completion: @escaping @Sendable (Bool) -> Void)
+public swift.method OtpInputType.hash(into:) :: func hash(into hasher: inout Hasher)
+public swift.method PhoneInputType.hash(into:) :: func hash(into hasher: inout Hasher)
+public swift.method UserEventType.hash(into:) :: func hash(into hasher: inout Hasher)
+public swift.property IntelligenceApiResponse.dfrId :: let dfrId: String
+public swift.property IntelligenceApiResponse.intelligenceResponse :: let intelligenceResponse: [String : Any]?
+public swift.property OTPlessIntelligence.isInitialized :: @objc var isInitialized: Bool { get }
+public swift.property OTPlessIntelligenceError.localizedDescription :: var localizedDescription: String { get }
+public swift.property OtpInputType.hashValue :: var hashValue: Int { get }
+public swift.property PhoneInputType.hashValue :: var hashValue: Int { get }
+public swift.property UpdateInfo.additionalInput :: let additionalInput: [String : String]?
+public swift.property UpdateInfo.merchantId :: let merchantId: String?
+public swift.property UpdateInfo.otpInputType :: let otpInputType: OtpInputType?
+public swift.property UpdateInfo.phoneInputType :: let phoneInputType: PhoneInputType?
+public swift.property UpdateInfo.phoneNumber :: let phoneNumber: String?
+public swift.property UpdateInfo.userEventType :: let userEventType: UserEventType?
+public swift.property UpdateInfo.userId :: let userId: String?
+public swift.property UserEventType.hashValue :: var hashValue: Int { get }
+public swift.struct IntelligenceApiResponse :: struct IntelligenceApiResponse
+public swift.struct UpdateInfo :: struct UpdateInfo
+public swift.type.property OTPlessIntelligence.shared :: @objc static let shared: OTPlessIntelligence

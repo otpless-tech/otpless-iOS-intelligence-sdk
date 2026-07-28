@@ -1,0 +1,70 @@
+name: Build & Test
+
+# Deterministic CI guardrail for OTPlessIntelligence (iOS): release-hygiene checks, the
+# REFLECTION CONTRACT check, and the committed public-API-surface golden (which builds
+# the package for the iOS Simulator). Runs on every PR into main (no paths filter, so it
+# is safe to require as a branch-protection status check) and on every push to main.
+#
+# The reflection-contract step is the one that matters most. OtplessBM discovers this
+# package at runtime via NSClassFromString and dispatches an @objc selector by string,
+# so a rename compiles everywhere and silently disables device intelligence. That
+# already shipped once: per the iOS SDK's CHANGELOG, device intelligence "never ran in
+# 2.x releases" because the dispatched selector did not exist.
+#
+# There is NO test step: this repo has no test target (Package.swift declares only the
+# IdentityFraud binary target and the OTPlessIntelligence library target). Do not read
+# a green run as "the tests pass" — there are none yet.
+#
+# The steps below restate the `gate` target in the root Makefile — the canonical
+# definition of "verified" for this repo. Change the Makefile first.
+#
+# This workflow never pushes commits.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: build-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    # macOS runner required: this package is iOS-only and depends on
+    # Frameworks/IdentityFraud.xcframework, so it can only be built with xcodebuild
+    # against an iOS Simulator destination.
+    runs-on: macos-14
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Release-hygiene checks (OTPLESS_DEBUG must be off)
+        run: bash scripts/check-release-hygiene.sh
+
+      - name: Check reflection contract (silent-degradation guard)
+        run: bash scripts/check-reflection-contract.sh
+
+      - name: Build for iOS Simulator and check public surface against committed golden
+        run: bash scripts/check-public-surface.sh
+
+  actionlint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Run actionlint
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color

@@ -73,7 +73,7 @@ Using dfrId (server-side)
    ```
    https://github.com/otpless-tech/otpless-ios-intelligence-sdk
    ```
-3. Set version rule to **Up to Next Major Version** from `1.2.0`
+3. Set version rule to **Up to Next Major Version** from `1.3.0`
 4. Select **OTPlessIntelligence** and add to your target
 
 **Via Package.swift:**
@@ -82,7 +82,7 @@ Using dfrId (server-side)
 dependencies: [
     .package(
         url: "https://github.com/otpless-tech/otpless-ios-intelligence-sdk",
-        from: "1.2.0"
+        from: "1.3.0"
     )
 ],
 targets: [
@@ -104,7 +104,7 @@ platform :ios, '13.0'
 
 target 'YourApp' do
   use_frameworks!
-  pod 'OTPlessIntelligence', '~> 1.2.0'
+  pod 'OTPlessIntelligence', '~> 1.3.0'
 end
 ```
 
@@ -704,6 +704,9 @@ Always test on a **real device** before App Store submission — some signals ar
 ---
 
 ## Changelog
+
+### 1.3.0
+- Explicitly set the IdentityFraud (Sign3) environment to `PROD`.
 
 ### 1.2.0
 - **Breaking:** `configure(appID:sessionContext:completion:)` renamed to `initialize(appId:completion:)`. `OTPlessSessionContext` removed entirely.

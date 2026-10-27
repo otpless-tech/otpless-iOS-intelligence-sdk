@@ -61,7 +61,7 @@ public enum OTPlessIntelligenceError: Error {
     }
 
     /// Hard-coded SDK version. Bump in lockstep with `OTPlessIntelligence.podspec`.
-    internal static let sdkVersion = "1.2.0"
+    internal static let sdkVersion = "1.3.0"
 
     // MARK: - Fetch Intelligence
 

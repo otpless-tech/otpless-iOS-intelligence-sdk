@@ -39,6 +39,7 @@ internal final class DeviceIntelligenceManager: @unchecked Sendable {
             let builder = Options.OptionBuilder()
                 .setClientId(config.intelligenceClientId)
                 .setClientSecret(config.secret)
+                .setEnvironment(.PROD)
 
             let options = builder.build()
 
